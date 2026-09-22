@@ -1,0 +1,1 @@
+﻿# 本包只用 Python 标准库；内核用 Node 运行（Node.js >= 18）

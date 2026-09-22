@@ -1,0 +1,15 @@
+# 统一按 LF 提交（插件要跨 Windows / Linux 用，避免整文件 diff）
+* text=auto eol=lf
+
+# 二进制/资源不做换行转换
+*.png binary
+*.jpg binary
+*.glb binary
+*.safetensors binary
+*.zip binary
+*.ico binary
+
+# 语言统计（GitHub 上显示更准）
+*.py   linguist-language=Python
+*.js   linguist-language=JavaScript
+*.ps1  linguist-language=PowerShell

@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+
+# 运行期产物（招式库自动入库缓存、向导输出、临时结果）
+sim3d/moves-user.json
+wushu_sim/js/sim3d/moves-user.json
+_e2e_out/
+*.log
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini

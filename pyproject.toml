@@ -1,0 +1,13 @@
+﻿[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "comfyui-h3-wushu-sim"
+version = "0.1.0"
+description = "ComfyUI nodes for the H3 Wushu Duel Simulator 60Hz kernel (fight choreography, action timing, H3/LTX-2.5 prompts)"
+requires-python = ">=3.9"
+dependencies = []
+
+[tool.setuptools]
+packages = ["wushu_sim"]
