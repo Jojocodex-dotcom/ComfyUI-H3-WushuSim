@@ -12,7 +12,7 @@
 
 ## 目录
 
-- [它解决什么问题](#它解决什么问题)
+- [功能与原理](#功能与原理)
 - [五个节点](#五个节点)
 - [安装](#安装)
 - [快速上手（3 步）](#快速上手3-步)
@@ -27,7 +27,7 @@
 
 ---
 
-## 它解决什么问题
+## 功能与原理
 
 视频模型最大的痛点是**打斗编排**：人物为什么打、打到第几秒、怎么收招、被格挡后怎么反击——
 这些东西靠人写提示词很难自洽。本包把一套 **60Hz 连续时空战斗内核**（米制坐标、固定步长、
@@ -174,8 +174,7 @@ print(r["moveLib"])          # 招式库统计：used/added/total
 ## 自检与排错
 
 ```bash
-python tools/selftest.py                 # 16 项：桥接状态/内核/一场完整模拟/5 个节点/可复现性
-python tools/selftest.py --src /path/to/simulator   # 临时改用开发目录里的内核
+python tools/selftest.py                 python tools/selftest.py --src /path/to/simulator   # 临时改用开发目录里的内核
 ```
 
 | 现象 | 原因与处理 |
@@ -284,7 +283,7 @@ ComfyUI nodes for the **H3 Wushu Duel Simulator's** 60 Hz fight kernel: run a **
 > Companion packs: **ComfyUI-H3-WushuBridge** (semantic bridge / prompt lint / training side) and
 > **ComfyUI-JEV-Orchestrator** (JEV orchestrates the whole execution). This pack decides *what the fight is*.
 
-## What it solves
+## Features & how it works
 
 Fight choreography is the hard part for video models: who attacks, at which second, how the recovery works,
 what happens after a block. This pack plugs a **60 Hz continuous-time combat kernel** (metric space, fixed step,
@@ -356,7 +355,7 @@ print(r["prompt"][:200], r["moveLib"])
 ## Self-test & troubleshooting
 
 ```bash
-python tools/selftest.py        # 16 checks: bridge, kernel, full duel, 5 nodes, reproducibility
+python tools/selftest.py
 ```
 
 | Symptom | Fix |
