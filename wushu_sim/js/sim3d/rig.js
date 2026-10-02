@@ -19,7 +19,7 @@
 })(typeof globalThis !== "undefined" ? globalThis : this, function () {
   "use strict";
 
-  const VERSION = "rig-0.6";
+  const VERSION = "rig-0.8.0";
 
   // 人体尺寸（米）
   const D = {
@@ -44,7 +44,11 @@
     if (!f1) return f0;
     const n = (k) => lerp(f0[k] || 0, f1[k] || 0, t);
     const ba0 = f0.ba == null ? f0.face : f0.ba, ba1 = f1.ba == null ? f1.face : f1.ba;
+    const chosen=t<0.5?f0:f1;
+    const foot=(key)=> f0[key]&&f1[key] ? {x:lerp(f0[key].x,f1[key].x,t),y:lerp(f0[key].y,f1[key].y,t),z:lerp(f0[key].z,f1[key].z,t)} : chosen[key];
     return {
+      phaseP: f0.ph===f1.ph ? n("phaseP") : chosen.phaseP, swingDir:chosen.swingDir, techKey:chosen.techKey,
+      plantedL:foot("plantedL"),plantedR:foot("plantedR"),
       x: n("x"), y: n("y"), z: n("z"), face: lerpAngle(f0.face, f1.face, t),
       ba: lerpAngle(ba0, ba1, t),
       ft:n("ft"), hp: n("hp"), gd: n("gd"), sa: n("sa"), t: n("t"), tp: n("tp"), gait: lerpAngle(f0.gait || 0, f1.gait || 0, t),
@@ -57,7 +61,7 @@
   function annotate(result) {
     const frames = result.frames || [];
     for (const side of ["A", "B"]) {
-      let travel = 0, px = null, py = null, body=null;
+      let travel = 0, px = null, py = null, body=null, feet=null, swing=null, nextFoot="L";
       for (const fr of frames) {
         const f = fr[side];
         if (px != null) travel += Math.hypot(f.x - px, f.y - py);
@@ -69,6 +73,25 @@
         if(!body) body={crouch:target.crouch,lean:target.lean};
         else for(const k of ['crouch','lean']) body[k]+=(target[k]-body[k])*0.25;
         f.visualBody={...body};
+        const ground=(f.z||0)<0.025 && f.st!=="down";
+        if(!ground){feet=null;swing=null;continue;}
+        const targetFoot=(side)=>({x:f.x+Math.cos(f.face)*0.06-Math.sin(f.face)*side*0.20,y:f.y+Math.sin(f.face)*0.06+Math.cos(f.face)*side*0.20,z:0});
+        if(!feet) feet={L:targetFoot(1),R:targetFoot(-1)};
+        if(swing){
+          const k=clamp((fr.t-swing.t)/0.20,0,1), e=k*k*(3-2*k);
+          feet[swing.side]={x:lerp(swing.from.x,swing.to.x,e),y:lerp(swing.from.y,swing.to.y,e),z:Math.sin(k*Math.PI)*0.09};
+          if(k>=1) swing=null;
+        }
+        if(!swing){
+          const dl=Math.hypot(feet.L.x-f.x,feet.L.y-f.y),dr=Math.hypot(feet.R.x-f.x,feet.R.y-f.y);
+          if(Math.max(dl,dr)>0.42){
+            const side=Math.abs(dl-dr)>0.12?(dl>dr?"L":"R"):nextFoot;
+            swing={side,t:fr.t,from:{...feet[side]},to:targetFoot(side==="L"?1:-1)};nextFoot=side==="L"?"R":"L";
+          }
+        }
+        // A knockback must not stretch a planted leg indefinitely.
+        for(const k of ["L","R"]){const d=Math.hypot(feet[k].x-f.x,feet[k].y-f.y);if(d>0.85){feet[k]=targetFoot(k==="L"?1:-1);swing=null;}}
+        f.plantedL={...feet.L};f.plantedR={...feet.R};
       }
     }
     // 招式进度：从 attack 事件起算，起手 0~0.45 / 判定 0.45~0.62 / 收招 0.62~1
@@ -148,10 +171,10 @@
       const target = norm(f.ba - (f.face || 0));
       if (ph === "active") P.bladeAngOff = target;                       // 判定帧：看到的就是算到的
       else if (ph === "recovery") {                                     // 收招：从落点带回常态架势
-        const k = clamp(((f.tp || 0) - 0.5) / 0.5, 0, 1);
+        const k = f.phaseP == null ? clamp(((f.tp || 0) - 0.5) / 0.5, 0, 1) : f.phaseP;
         P.bladeAngOff = lerpAngle(target, restAng, k);
       } else {                                                          // 起手：从架势摆到起始角
-        const k = clamp((f.tp || 0) / 0.33, 0, 1);
+        const k = f.phaseP == null ? clamp((f.tp || 0) / 0.33, 0, 1) : f.phaseP;
         P.bladeAngOff = lerpAngle(restAng, target, k);
       }
     } else {
@@ -168,16 +191,19 @@
         const baseP = { crouch: 0.10, lean: 0.02, twist: 0, weight: 0, bladePitch: -0.18, armExtend: D.armReach, stepW: 0, tuck: 0 };
         const mix = (x, y, t) => { const o = {}; Object.keys(baseP).forEach(kk => { const a1 = (x[kk] == null ? baseP[kk] : x[kk]), b1 = (y[kk] == null ? baseP[kk] : y[kk]); o[kk] = a1 + (b1 - a1) * t; }); return o; };
         const tp = f.tp || 0;
-        const easeW = clamp(tp / 0.7, 0, 1);
-        const prof = ph === "windup" ? mix(baseP, W, easeW * easeW * (3 - 2 * easeW))
-                   : ph === "active" ? mix(W, AC, clamp(tp / 0.35, 0, 1))
-                   : mix(mix(AC, RC, clamp(tp / 0.5, 0, 1)), baseP, clamp((tp - 0.5) / 0.5, 0, 1));
+        const pp = clamp(f.phaseP == null ? (ph==="windup"?tp/0.36:ph==="active"?(tp-0.36)/0.18:(tp-0.54)/0.46) : f.phaseP,0,1);
+        const ease=x=>x*x*(3-2*x);
+        const prof = ph === "windup" ? mix(baseP,W,ease(pp))
+                   : ph === "active" ? mix(W,AC,ease(pp))
+                   : pp<0.45 ? mix(AC,RC,ease(pp/0.45)) : mix(RC,baseP,ease((pp-0.45)/0.55));
         // 写回姿态（招式档案 → 身体语言；不同招式在这里分道扬镳）
         P.crouch = prof.crouch; P.lean = prof.lean;
-        P.twist = prof.twist * (cfg.swingDir === -1 ? -1 : 1);
+        P.twist = prof.twist * ((f.swingDir || cfg.swingDir) === -1 ? -1 : 1);
         P.weight = prof.weight; P.bladePitch = prof.bladePitch; P.armExtend = prof.armExtend;
         P.stepW = D.stanceW + prof.stepW + 0.16 * clamp(tp / 0.62, 0, 1) * (active ? 1 : 0.4);
         P.tuck = prof.tuck || 0; P.gaitAmp = 0.35;
+        // 出招时另一只手要保持架式（不许缩回胸口）：架式强度按"站立"档给
+        P.guard = 0.5;
         // 连招衔接：上一招的收招惯性带进来（不回中立），看得出是连着打而不是一招一顿
         if (!active && rec && f.comboT != null && f.comboN > 1) {
           const ch = clamp(1 - (f.comboT + 0.35) / 0.35, 0, 1) * 0.45;
@@ -187,9 +213,13 @@
         break;
       }
       case "block":
-        // 格挡：兵器立起、双臂架住、重心下沉吃劲，受击瞬间回弹（看得出"顶住了"）
-        P.crouch = 0.34; P.lean = -0.10 + (f.recoil || 0) * 0.25; P.guard = 1; P.bladePitch = 0.82;
-        P.armExtend = 0.24; P.stepW = D.stanceW + 0.14; P.weight = -0.22 - (f.recoil || 0) * 0.2;
+        // 格挡（2026-10-01 用户：「防御动作就是双拳抱着脸硬扛，要改成会用手去格挡」）：
+        //   器械＝**横架**（兵器几乎水平地把它架住，不是竖着挡在脸前）；徒手＝前臂立起、肘尖下垂去格挡。
+        //   两者都保留"重心下沉吃劲、受击回弹"的读数，看得出是"顶住了"而不是抱头挨打。
+        P.crouch = 0.34; P.lean = -0.10 + (f.recoil || 0) * 0.25; P.guard = 1;
+        P.bladePitch = (cfg && cfg.bare) ? 0.58 : 0.16;
+        P.armExtend = (cfg && cfg.bare) ? 0.30 : 0.38;
+        P.stepW = D.stanceW + 0.14; P.weight = -0.22 - (f.recoil || 0) * 0.2;
         P.twist = -0.18; P.recoil = f.recoil || 0; break;
       case "dodge":
         // 闪避：明显侧倾压低、一步跨开、兵器护在外侧（一眼能看出"让开了"）
@@ -209,12 +239,18 @@
         P.bladePitch = -0.08; P.armExtend = 0.30; P.stepW = D.stanceW + 0.26; break;
       case "down": {
         const k = clamp(f.ft == null ? 1 : f.ft, 0, 1);   // 倒下过程 0→1（引擎给 ft），不是一帧躺平
-        P.down = k;
-        P.crouch = lerp(0.30, 1, k);
-        P.lean = lerp(-0.10, 0.10, k);
-        P.bladePitch = lerp(-0.30, -0.95, k);
-        P.armExtend = lerp(0.28, 0.16, k);
-        P.headTilt = lerp(-0.10, 0.25, k);
+        // 起身（rig-0.8）：引擎在躺满硬直前 0.6 秒先置 rising 并给 rise（0→1），
+        //   这段必须把身体**连续**转回来、手臂一边撑地一边收回架式 ——
+        //   旧写法这段一直保持"躺平"，状态一变 idle 就一帧站起（实测单帧胸口 0.267 米，test-rig 一直红）。
+        const rs = clamp(f.rise || 0, 0, 1);
+        P.down = k * (1 - rs);
+        P.crouch = lerp(lerp(0.30, 1, k), 0.16, rs);
+        P.lean = lerp(lerp(-0.10, 0.10, k), 0.02, rs);
+        P.bladePitch = lerp(lerp(-0.30, -0.95, k), -0.22, rs);
+        P.armExtend = lerp(lerp(0.28, 0.16, k), D.armReach, rs);
+        P.headTilt = lerp(lerp(-0.10, 0.25, k), 0.0, rs);
+        P.guard = 0.45 * rs;                              // 撑地起身时手一边收回来护住自己
+        P.stepW = lerp(D.stanceW * 0.7, D.stanceW, rs);
         P.gaitAmp = 0;
         break;
       }
@@ -224,6 +260,10 @@
         P.guard = 0.5; P.bladePitch = -0.22; P.armExtend = D.armReach;
         P.stepW = D.stanceW + (st === "move" ? 0.08 : 0);
         P.gaitAmp = st === "move" ? 1 : 0;
+        // 侧身站架（2026-09-30 用户：「一点都打斗不自然」）：站立/走位时躯干侧转、前肩朝对手，
+        //   不再是两个人正面面对面的"木头人"。方向与提示词里的「A 正架（左脚在前）／
+        //   B 反架（右脚在前）」同一口径，由 cfg.leadSide 传进来。
+        P.twist = -0.20 * ((cfg && cfg.leadSide === -1) ? -1 : 1);
         break;
     }
     if(f.visualBody) {P.crouch=f.visualBody.crouch;P.lean=f.visualBody.lean;}
@@ -280,13 +320,60 @@
     // 兵器方向：朝向 + 偏移（攻击时偏移 = ba - face，于是方向恰好等于 ba）
     const bladeAng = face + P.bladeAngOff;
     const rel = P.bladeAngOff;
-    const handR = world(Math.cos(rel) * P.armExtend, Math.sin(rel) * P.armExtend, D.chest - 0.06 + P.bladePitch * 0.16);
-    const backOff = P.twoHand > 0.5 ? 0.17 : 0.08;
-    const handL = world(Math.cos(rel) * (P.armExtend - backOff), Math.sin(rel) * (P.armExtend - backOff), D.chest - 0.02 + P.bladePitch * 0.10);
-    const elbowOf = (hand) => ({
-      x: (chest.x + hand.x) / 2, y: (chest.y + hand.y) / 2,
-      z: (chest.z + hand.z) / 2 + 0.10 - crouch * 0.06 + P.recoil * 0.04
-    });
+    // ── 架式（v0.8）：前手伸出护中线、后手抬到下颌 —— 两手不再叠在胸口 ──────────
+    //   用户（2026-09-30）：「角色老是双手放在胸口这个动作非常难看，一点都打斗不自然。」
+    //   旧版把两只手都放在**同一条射线**上（内核刀锋角方向）、只差 0.08 米、同一个高度 →
+    //   徒手与单兵器角色看上去就是"双手抱在胸前"。现在按散打/武术架式分前后手：
+    //     · 前手：向前伸出 0.30~0.40 米、高度在胸与下颌之间、贴住中线；
+    //     · 后手：收回 0.10~0.14 米、抬到下颌／腮侧，肘尖下垂。
+    //   与提示词同一口径：A 正架（左手在前）／B 反架（右手在前），由 cfg.leadSide 传进来。
+    //   ⚠ 兵器手仍然从"内核刀锋角"那条射线出发（tip = 手 + 方向×长度），所以
+    //     「判定帧方向 = 内核 ba」这条不变量不变（sim3d/test-rig.js 在守）。
+    const leadSide = (cfg && cfg.leadSide === -1) ? -1 : 1;     // +1＝正架（左手在前）
+    const g = clamp(P.guard == null ? 0.5 : P.guard, 0, 1);     // 架式强度：站立/格挡高，受击/倒地低
+    const rLead = (leadSide === -1);                            // 右手是不是前手（反架）
+    const bare = !!(cfg && cfg.bare);                           // 徒手：两只手都按架式摆
+    // 2026-10-01：散打/拳击抱架（后手护颌）**只在擂台徒手**出现；其余场次用武术架/持械架。
+    const boxing = !!(cfg && cfg.boxing);
+    const striking = (f.st === "attack" || f.st === "cast" || f.st === "block");
+    // 侧转后的横向偏移要跟着肩线走（否则手会与肩膀脱开）
+    const ct2 = Math.cos(P.twist), st2 = Math.sin(P.twist);
+    const atBody = (lx, ly, lz) => world(lx - st2 * ly * 0.5, ct2 * ly, lz);
+    const dLead = 0.30 + 0.10 * g, dRear = 0.08 + 0.06 * g;                          // 前手前伸／后手收回
+    const hzLead = D.chest + 0.04 + 0.06 * g, hzRear = D.chest + 0.16 + 0.08 * g;    // 前手在胸-颌之间／后手在颌侧
+    const hzRib = D.chest - 0.10 + 0.05 * g;                                          // 护肋手：收在肋前（武术架／持械的副手）
+    const hzW = D.chest - 0.06 + P.bladePitch * 0.16;                                // 兵器手高度（跟刀锋俯仰）
+    const hzGrip = D.chest - 0.02 + P.bladePitch * 0.10;
+    let handR, handL, tuckL = false, tuckR = false;
+    if (P.twoHand > 0.5) {
+      // 双手长兵：两手握在同一根兵器轴上（前手在前、后手在后 0.17 米）—— 这才是"握着枪棒"
+      handR = atBody(Math.cos(rel) * P.armExtend, Math.sin(rel) * P.armExtend - 0.04, hzW);
+      handL = atBody(Math.cos(rel) * (P.armExtend - 0.17), Math.sin(rel) * (P.armExtend - 0.17) + 0.05, hzGrip);
+    } else if (bare && !striking) {
+      // 徒手站立/走位：前手伸出护中线，另一只手按场次摆——
+      //   擂台（boxing）＝散打/拳击架：后手护到下颌腮侧；其余（武术场）＝武术起手架：后手虚握收在肋前。
+      const hzBack = boxing ? hzRear : hzRib;
+      if (rLead) { handR = atBody(dLead, -0.02, hzLead); handL = atBody(dRear, 0.12, hzBack); tuckL = true; }
+      else { handR = atBody(dRear, -0.12, hzBack); handL = atBody(dLead, 0.02, hzLead); tuckR = true; }
+    } else {
+      // 持械（或徒手出招）：兵器手/击打手沿内核刀锋角那条射线走。
+      //   2026-10-01 用户：「除了打拳击擂台赛，其余的武术打斗情景是不会摆这个动作的」——
+      //   持械时**兵器手朝前**（刀尖/剑尖/棍头指向对手），另一只手收在肋前护住自己；
+      //   旧版把兵器手缩回腰侧、反而把空手伸到前面，看着就是"空手摆拳击架、兵器成了摆设"。
+      const dW = striking ? P.armExtend : (0.34 + 0.10 * g);
+      handR = atBody(Math.cos(rel) * dW, Math.sin(rel) * dW + (striking ? -0.10 : -0.14), hzW);
+      handL = atBody(dRear, 0.10, hzRib); tuckL = true;                   // 副手护肋（不再贴腮、也不叠胸口）
+    }
+    // 肘：肩→手的 1/3 处（前臂比上臂短），并且**不许把肘抬到肩膀以上**：
+    //   · 贴腮那只手（tuck）：肘尖下垂到肩下 0.14 米，收在肋前；
+    //   · 其余：肘略高于手（腰侧握兵/出拳都是这个形），高位劈砍时允许随手臂抬起。
+    //   旧版一律"胸与手的中点 +0.10 米"→ 肘比肩膀还高，看着像端着两把枪（用户说的"不自然"）。
+    const elbowOf = (hand, sh, tuck) => {
+      const mx = (sh.x + hand.x * 2) / 3, my = (sh.y + hand.y * 2) / 3;
+      const mz = (sh.z + hand.z * 2) / 3;
+      const z = tuck ? Math.min(mz, sh.z - 0.14) : Math.min(mz, hand.z + 0.04);
+      return { x: mx, y: my, z: Math.max(baseZ + 0.20, z) };
+    };
     const weaponLen = cfg.weaponLen || 1.0;
     const pitch = P.bladePitch;
     let tip = {
@@ -303,23 +390,32 @@
     const stance = P.stepW / 2;
     const step = Math.sin(f.gait || 0) * D.stride * 0.42 * clamp(P.gaitAmp, 0, 1);
     const footZ = baseZ > 0.02 ? baseZ + clamp(P.tuck || 0, 0, 1) * D.tuckFoot : 0;
-    const footL = worldAbs(0.10 + step, stance, footZ);
-    const footR = worldAbs(-0.06 - step, -stance, footZ);
+    const footL = f.plantedL && baseZ<0.025 && !P.down ? {...f.plantedL} : worldAbs(0.10 + step, stance, footZ);
+    const footR = f.plantedR && baseZ<0.025 && !P.down ? {...f.plantedR} : worldAbs(-0.06 - step, -stance, footZ);
     const kneeOf = (foot, back) => ({
-      x: (root.x + foot.x) / 2 + (back ? -0.06 : 0.10),
-      y: (root.y + foot.y) / 2,
+      x: (root.x + foot.x) / 2 + cos * (back ? -0.06 : 0.10),
+      y: (root.y + foot.y) / 2 + sin * (back ? -0.06 : 0.10),
       z: Math.max(D.kneeMin, (root.z + foot.z) / 2 + 0.10 - crouch * 0.08)
     });
 
-    return {
+    const shoulderL = shoulder(1), shoulderR = shoulder(-1);
+    const output = {
       root, chest, neck, head, hipL: hipJ(1), hipR: hipJ(-1),
-      shoulderL: shoulder(1), shoulderR: shoulder(-1),
-      elbowL: elbowOf(handL), elbowR: elbowOf(handR), handL, handR,
+      shoulderL, shoulderR,
+      elbowL: elbowOf(handL, shoulderL, tuckL), elbowR: elbowOf(handR, shoulderR, tuckR), handL, handR,
       kneeL: kneeOf(footL, false), kneeR: kneeOf(footR, true), footL, footR,
       blade: { a: handR, b: tip }, weaponLen, params: P,
       baseZ, air: baseZ > 0.05,
       gait: f.gait || 0, state: f.st, phase: f.ph, tech: f.tech || "", tp: f.tp || 0
     };
+    if(P.down>0){
+      const ang=-P.down*Math.PI*0.5, c=Math.cos(ang),sn=Math.sin(ang);
+      const rotate=p=>{const dx=p.x-root.x,dy=p.y-root.y,h=p.z-root.z,forward=dx*cos+dy*sin,side=-dx*sin+dy*cos;
+        return {x:root.x+(forward*c+h*sn)*cos-side*sin,y:root.y+(forward*c+h*sn)*sin+side*cos,z:Math.max(baseZ+0.04,root.z-forward*sn+h*c)};};
+      for(const k of ["chest","neck","head","hipL","hipR","shoulderL","shoulderR","elbowL","elbowR","handL","handR","kneeL","kneeR","footL","footR"])output[k]=rotate(output[k]);
+      output.blade={a:output.handR,b:rotate(tip)};
+    }
+    return output;
   }
 
   // ── 兵器避让：把刀尖收回到对手身体表面（方向不变，只改长度）────────────

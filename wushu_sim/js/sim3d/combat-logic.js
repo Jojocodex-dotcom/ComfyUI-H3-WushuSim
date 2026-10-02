@@ -451,10 +451,14 @@
     if (out.stats.idleShare > 0.18) out.issues.push({ level: "warn", code: "idle-share-timing", msg: "待机时间占 " + (out.stats.idleShare * 100).toFixed(0) + "%", hint: "空档要用有目的的动作填满。" });
     const ev = (result && result.events) || [];
     const blocks = ev.filter(e => e.type === "block");
+    // 压制持续度：格挡后 0.8 秒内**对手**是否继续出手（防守方被压着的程度）
     const kept = blocks.filter(b => ev.some(x => x.type === "attack" && x.who !== b.who && x.t > b.t && x.t - b.t <= 0.8)).length;
+    // 真正的反击：格挡后 0.8 秒内**防守方自己**出手
+    const counterByDefender = blocks.filter(b => ev.some(x => x.type === "attack" && x.who === b.who && x.t > b.t && x.t - b.t <= 0.8)).length;
     out.stats.counterAfterBlock = blocks.length ? +(kept / blocks.length).toFixed(2) : null;
-    if (blocks.length >= 3 && out.stats.counterAfterBlock < 0.35)
-      out.issues.push({ level: "warn", code: "counter-window-missed", msg: "格挡后 0.8 秒内对手出手的比例只有 " + out.stats.counterAfterBlock, hint: "格挡后的反击窗口要用上（提示词里写明窗口秒数）。" });
+    out.stats.counterByDefender = blocks.length ? +(counterByDefender / blocks.length).toFixed(2) : null;
+    if (blocks.length >= 3 && out.stats.counterByDefender < 0.35)
+      out.issues.push({ level: "warn", code: "counter-window-missed", msg: "格挡后 0.8 秒内自己反击的比例只有 " + out.stats.counterByDefender, hint: "守下来要接反击（提示词里写明窗口秒数）。" });
     return out;
   }
 
@@ -469,27 +473,33 @@
     let idleFrames = 0, maxIdleRun = 0, run = 0;
     fr.forEach(f => {
       const a = f.A || {}, b = f.B || {};
-      if (a.st === "idle") idleFrames++;
-      if (b.st === "idle") idleFrames++;
+      if (a.st === "idle" && !(b && (b.st === "down" || b.st === "getup"))) idleFrames++;   // 2026-09-29：对手倒地/起身时自己的收势等待不算发呆
+      if (b.st === "idle" && !(a && (a.st === "down" || a.st === "getup"))) idleFrames++;
       const either = (a.st === "idle" || b.st === "idle");
-      if (either) { run += dt; if (run > maxIdleRun) maxIdleRun = +run.toFixed(2); } else run = 0;
+      if (either && !(a.st === "down" || b.st === "down")) { run += dt; if (run > maxIdleRun) maxIdleRun = +run.toFixed(2); } else run = 0;
     });
     const attacks = ev.filter(e => e.type === "attack").length;
     const actions = ev.filter(e => COMBAT.indexOf(e.type) >= 0).length;
-    const blocks = ev.filter(e => e.type === "block" || e.type === "dodge").length;
-    const counters = ev.filter(e => e.type === "hit").filter(h => ev.some(x => (x.type === "block" || x.type === "dodge") && x.who === h.who && h.t - x.t > 0 && h.t - x.t <= 0.9)).length;
+    const defends = ev.filter(e => e.type === "block" || e.type === "dodge");
+    // 反击率 = 防守方**自己**在 0.9 秒内出手（这才是"反击窗口兑现"）
+    // 原实现数的是"防守后反被打中"，方向正好相反（会把"守得好"报成"反击率低"，实测 75% 场次误报）。
+    const counters = defends.filter(d => ev.some(a => a.type === "attack" && a.who === d.who && a.t - d.t > 0 && a.t - d.t <= 0.9)).length;
+    // 挨打率 = 防守后 0.9 秒内又被打中（守住了却没走开）
+    const punished = defends.filter(d => ev.some(h => h.type === "hit" && h.who === d.who && h.t - d.t > 0 && h.t - d.t <= 0.9)).length;
     out.stats = {
       attackDensity: +(attacks / out.duration).toFixed(2),
       actionDensity: +(actions / out.duration).toFixed(2),
       idleFrames: idleFrames,
       idleShare: +(idleFrames / (fr.length * 2)).toFixed(3),
       maxIdleRun: maxIdleRun,
-      blocks: blocks, counters: counters,
-      counterRate: blocks ? +(counters / blocks).toFixed(2) : 0
+      blocks: defends.length, counters: counters, punished: punished,
+      counterRate: defends.length ? +(counters / defends.length).toFixed(2) : 0,
+      punishedRate: defends.length ? +(punished / defends.length).toFixed(2) : 0
     };
     if (maxIdleRun > 0.4) out.issues.push({ level: "warn", code: "idle-run", msg: "内核里存在 " + maxIdleRun + " 秒的连续静止", hint: "写提示词时必须给这段时间补上间隙动作。" });
     if (out.stats.idleShare > 0.08) out.issues.push({ level: "warn", code: "idle-share", msg: "静止帧占比 " + (out.stats.idleShare * 100).toFixed(1) + "%", hint: "偏高。" });
-    if (blocks && out.stats.counterRate < 0.35) out.issues.push({ level: "warn", code: "low-counter", msg: "被格挡／闪避后的反击率只有 " + out.stats.counterRate, hint: "提示词里要显式写反击窗口。" });
+    if (defends.length >= 3 && out.stats.counterRate < 0.35) out.issues.push({ level: "warn", code: "low-counter", msg: "格挡／闪避后 0.9 秒内自己出手反击的比例只有 " + out.stats.counterRate, hint: "守住之后要接反击，不能只是挡。" });
+    if (defends.length >= 3 && out.stats.punishedRate > 0.5) out.issues.push({ level: "warn", code: "punished-after-defense", msg: "守下来之后 0.9 秒内又被打中的比例 " + out.stats.punishedRate, hint: "防住就该走位／换架脱离，不是站着挨第二下。" });
     if (out.stats.actionDensity < 2.5) out.issues.push({ level: "error", code: "low-density", msg: "动作密度仅 " + out.stats.actionDensity + " 次/秒", hint: "过于稀疏。" });
     return out;
   }

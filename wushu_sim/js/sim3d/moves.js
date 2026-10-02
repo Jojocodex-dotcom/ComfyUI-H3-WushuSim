@@ -16,7 +16,12 @@
  *   tiers          [最低等级, 最高等级]
  *   prep           准备动作（起势，一句话，画面能落地）
  *   act            出招动作（兵器/身体怎么走，一句话）
- *   effect         命中效果（华丽，写清形态/光效/物理反应）
+ *   fx             { ming, fan } 命中/反馈两段原文（旧库文案切开后的两半，见下）
+ *   effect         **五段式效果文案**：起手｜发力｜命中｜余势｜反馈
+ *                  进攻/移动/法术：五段全写，含准备时间、有效时间、距离·扇角·高度带、收招时间；
+ *                  防守/闪避类：自动降为三段精简（起手｜身法｜收势）——用户明确说这类不用写那么细。
+ *                  纪律：段里的数字**由本条自己的 timing/range/arc 现场生成**（fxOf），
+ *                  所以文案与内核真正使用的参数永远一致，改了参数不会留下假描述。
  *   follow         连招衔接（这一招收完怎么接下一招）
  *   timing         { charge:[min,max], active:[min,max], recover:[min,max] }（秒）
  *   range          [最近, 最远]（米）
@@ -34,7 +39,7 @@ const SEED = [
   // ═══ 通用近战（与内核 VARIANTS 对齐）═══
   {
     key: "slash", zh: "横斩", en: "horizontal slash", category: "近战", weapons: [], tiers: [1, 9],
-    prep: "侧身而立，兵器横于胸前，刃口朝外，重心压在后腿，脚下暗含半步",
+    prep: "侧身站架（前脚虚点、后脚吃重），兵器斜举在身前约下颌高度、刃口朝外，前手控住中线，后手贴肋",
     act: "拧腰送肩，兵器自外向内横扫一线，肘随刃走、腰催肘、肘催腕，收在半身位",
     effect: "刃线划开一道银亮的弧光，空气被切成两半发出「嗡」的一声；命中处血线沿着切口崩开，衣料先一步裂开，火星与雨珠同时被扫成一片扇面飞散",
     follow: "刃势未收就沉肘转腕，顺势接一记反手回抹或上撩",
@@ -168,7 +173,7 @@ const SEED = [
     key: "jian_baihong", zh: "白虹贯日", en: "white-rainbow thrust", category: "近战", weapons: ["jian"], tiers: [4, 9],
     prep: "剑指并拢按在剑脊上，剑尖微垂，整个人静得像一潭水",
     act: "一剑直取中线，去势极快、去而不返，剑身与手臂成一条笔直的白线",
-    effect: "剑光像一道白虹从胸前射出，快到只留下一根细亮的线；命中时在护具上点出一个白点，随之而来的是一串细密的火星与一声清越的剑鸣",
+    effect: "剑光像一道白虹自腰侧翻出，快到只留下一根细亮的线；命中时在护具上点出一个白点，随之而来的是一串细密的火星与一声清越的剑鸣",
     follow: "剑不回撤，借着前冲的势再进一步，用剑锷撞击对手",
     timing: { charge: [0.10, 0.20], active: [0.03, 0.05], recover: [0.18, 0.30] },
     range: [1.8, 2.8], arc: 20, band: "mid", tags: ["突进", "点破"]
@@ -243,7 +248,7 @@ const SEED = [
     prep: "第一刀挥空、顺势转身，左脚在湿地上轻轻一捻，肩胛已经转到另一侧",
     act: "第一斩被让开，刀不停、人转身，借着回旋的离心力自下而上再斩第二刀",
     effect: "两道光痕在雨里交叉成一个「V」，第一次落空的刀势反而变成第二刀的加速；第二斩把对手从侧面整个掀起来，护具的系带在半空里断开",
-    follow: "二连斩之后刀已回到胸前，直接接突刺收尾",
+    follow: "二连斩之后刀收回腰侧、肘尖朝下，直接接突刺收尾",
     timing: { charge: [0.20, 0.34], active: [0.08, 0.13], recover: [0.32, 0.54] },
     range: [1.4, 2.4], arc: 180, band: "mid", tags: ["连击", "反打"]
   },
@@ -263,7 +268,7 @@ const SEED = [
     prep: "拳面贴在对手胸口的护具上，肘微屈、肩沉下，脚跟已经离地三寸",
     act: "行程只有一寸：脚跟一碾、胯一弹、力从地起，一拳把整条力线打进对手体内",
     effect: "看不出挥拳，只看见护具忽然向内凹了一寸；对手的呼吸被这一下截断，整个人向后腾空滑出去，落地时护甲上还留着一个清晰的拳印",
-    follow: "打完立刻收拳贴身，另一只手护住中线",
+    follow: "打完立刻沉肩收拳回腮侧，另一只手（前手）仍控着中线",
     timing: { charge: [0.06, 0.14], active: [0.02, 0.04], recover: [0.16, 0.28] },
     range: [0.4, 0.9], arc: 10, band: "mid", tags: ["贴身", "破防"]
   },
@@ -403,8 +408,204 @@ const SEED = [
     follow: "雷弧之后对手短暂僵直，直接上前补终结一击",
     timing: { charge: [0.5, 1.5], active: [0.03, 0.06], recover: [0.24, 0.42] },
     range: [2.0, 9.0], arc: 12, band: "mid", tags: ["术法", "僵直"]
+  },
+
+  // ═══ 腿法与特技（2026-09-29：用户「动作编排要好看，回旋踢、飞腿这些特殊动作都没有」）═══
+  //   key 与内核 VARIANTS 的腿法族一一对应（kick_round/kick_side/…）——引擎按**名字**回查这里；
+  //   距离写的是"这一脚够到多远"（腿法不吃兵器长度换算，见 startAttack 里的 v.kick 判断）。
+  {
+    key: "kick_round", zh: "回旋踢", en: "spinning roundhouse kick", category: "拳脚", weapons: [], tiers: [2, 9],
+    prep: "支撑腿微屈、上身反向后倾作配重，提膝把胯打开，眼睛越过肩膀盯住对手的太阳穴",
+    act: "以支撑脚掌为轴拧转腰胯，大腿带小腿把脚背甩成一条横线，整条腿像鞭梢一样抽出去",
+    effect: "腿影在雨幕里扫出一道完整的圆，水珠被脚背抽成一片扇面飞散；命中处「啪」的一声脆响，对手的头颈被扫得侧过去，脚下横滑半步才找回重心",
+    follow: "落地不换脚，借着转过来的惯性直接接一记反手肘或后摆莲",
+    timing: { charge: [0.14, 0.26], active: [0.05, 0.09], recover: [0.26, 0.44] },
+    range: [1.3, 2.0], arc: 168, band: "mid", tags: ["重腿", "横扫"]
+  },
+  {
+    key: "kick_side", zh: "侧踹", en: "side thrust kick", category: "拳脚", weapons: [], tiers: [2, 9],
+    prep: "提膝收腿、脚掌外翻亮出脚底，上身向反方向压下去，整个人像一张侧开的弓",
+    act: "脚跟领先直线蹬出，力从胯根灌到脚掌，蹬完即收——走的是最短的一条直线",
+    effect: "一脚踹出，空气里被压出一声闷响；命中时对手像被门板正面撞中，护具向内凹成一片，人贴着地面滑出去，鞋底在湿石上犁出两道白痕",
+    follow: "踹完立刻收腿落地，往前垫半步补拳",
+    timing: { charge: [0.12, 0.22], active: [0.06, 0.10], recover: [0.24, 0.40] },
+    range: [1.5, 2.4], arc: 26, band: "mid", tags: ["震退", "中距"]
+  },
+  {
+    key: "kick_heel", zh: "转身后摆莲", en: "spinning heel kick", category: "拳脚", weapons: [], tiers: [4, 9],
+    prep: "先向反方向虚晃半步骗开对手视线，肩胯反向拧紧，眼不看对手却能感到他的位置",
+    act: "整个人原地转体半圈以上，腿自下而上划一个大弧，用脚跟从外侧砸向对手的头颈",
+    effect: "背对着人转身甩出一腿，脚跟在半空划出一道又高又飘的弧；命中时对手头一偏、上身被这一记掀歪，耳边全是风声，兵器差点脱手",
+    follow: "转完一圈人已经换了站位，直接接一记突刺或低扫",
+    timing: { charge: [0.18, 0.30], active: [0.05, 0.09], recover: [0.30, 0.50] },
+    range: [1.3, 2.1], arc: 150, band: "high", tags: ["高腿", "转体"]
+  },
+  {
+    key: "knee", zh: "膝撞", en: "knee strike", category: "拳脚", weapons: [], tiers: [1, 9],
+    prep: "一手扣住对手的衣领或肩臂往下压，另一手护住自己的中线，膝盖已经提起来等着",
+    act: "胯往前顶、膝盖自下向上撞进对手的腹肋，撞完不收腿，顺势转成肘",
+    effect: "贴身一记闷撞，皮革相击的声音又沉又短；对手的呼吸被这一下顶断，腰弯成了虾，只能拿手护住被撞的那一侧",
+    follow: "膝一落地就接肘击，趁对手弯腰再来一下上勾",
+    timing: { charge: [0.08, 0.16], active: [0.03, 0.06], recover: [0.16, 0.30] },
+    range: [0.4, 0.9], arc: 46, band: "mid", tags: ["贴身", "破防"]
+  },
+  {
+    key: "elbow", zh: "肘击", en: "elbow strike", category: "拳脚", weapons: [], tiers: [1, 9],
+    prep: "肩膀前送、肘尖竖起成一条直线，脚下一碾把整个人的重量压到肘尖上",
+    act: "肩带肘、肘带身，肘尖沿着最短的一条线砸进对手的面门或太阳穴，收肘时人已经贴进怀里",
+    effect: "几乎看不出动作，只有一声闷响；命中处血线立刻从眉骨渗出来，对手眼前发黑、踉跄半步，抓不住自己的架势",
+    follow: "肘击之后人已经在怀内，另一只手顺势擒住他的腕子",
+    timing: { charge: [0.07, 0.14], active: [0.03, 0.05], recover: [0.14, 0.26] },
+    range: [0.35, 0.8], arc: 62, band: "high", tags: ["贴身", "暗手"]
+  },
+  {
+    key: "fly_kick", zh: "飞腿", en: "flying kick", category: "轻功", weapons: [], tiers: [3, 9],
+    prep: "屈膝蓄力、上身先前倾，起跳前最后一步蹬得特别重，眼里锁着对手的胸口",
+    act: "整个人腾身扑出，一条腿在前伸得笔直、另一条腿收回腹下，像一支射出去的长矛",
+    effect: "人贴着雨幕飞过去，衣袍被风拉成一条直线；脚尖正中对手胸口，把他整个人从原地蹬得向后飞出去，落地时水花炸成一圈",
+    follow: "落地就势屈膝，起身接一记横扫或直接追击",
+    timing: { charge: [0.16, 0.28], active: [0.05, 0.09], recover: [0.26, 0.44] },
+    range: [1.5, 2.6], arc: 64, band: "mid", tags: ["空袭", "突进"]
+  },
+  {
+    key: "air_round", zh: "腾空回旋踢", en: "aerial roundhouse kick", category: "轻功", weapons: [], tiers: [5, 9],
+    prep: "在半空收胯提膝、身体侧倒成一条横线，眼角余光锁住对手的头肩",
+    act: "滞空的这一瞬把腰胯横向拧开，腿在空中扫出一整圈，落地前那一拍正好扫到对手头上",
+    effect: "人悬在半空拧出一个完整的圆，雨水被腿风甩成一道环；命中时对手整个人被带得原地转半圈，头一歪，手里兵器晃出老远",
+    follow: "扫完顺势落地成弓步，起身立刻追打",
+    timing: { charge: [0.16, 0.28], active: [0.07, 0.12], recover: [0.28, 0.46] },
+    range: [1.3, 2.2], arc: 190, band: "mid", tags: ["空战", "横扫"]
+  },
+  {
+    key: "air_axe", zh: "劈腿", en: "aerial axe kick", category: "轻功", weapons: [], tiers: [5, 9],
+    prep: "在半空把一条腿直直举过头顶，上身略后仰，像起手要劈开什么东西",
+    act: "自最高点把腿笔直劈下来，落点在对手的头顶或持械的手腕上，落地时脚掌先着地",
+    effect: "腿自天而降劈出一条竖直的线，脚下的雨水被劈得向两边分开；命中时对手的兵器被砸得向下沉，头颈一缩，膝盖被迫弯了一截",
+    follow: "落地即起，趁对手兵器下沉时贴身突刺",
+    timing: { charge: [0.16, 0.28], active: [0.06, 0.10], recover: [0.28, 0.46] },
+    range: [1.2, 2.1], arc: 84, band: "high", tags: ["空战", "破防"]
   }
 ];
+
+// ── 招式效果：五段式（起手／发力／命中／余势／反馈）─────────────────────────
+//   用户要求：招式效果不能只是一句短语（"拳力刚猛，直击胸口"太薄）；
+//   进攻/移动/法术类要写清五段，**防守/闪避类不必那么详细**。
+//   实现纪律：五段中的时间/距离/扇角**由条目自己的 timing/range/arc 生成**，
+//   文案和内核真正用的参数因此永远一致（改参数不会留下假描述）。
+const FX_LABELS = ["起手", "发力", "命中", "余势", "反馈"];
+const FX_LABELS_SIMPLE = ["起手", "身法", "收势"];
+const FX_DEF_TAGS = ["闪避", "防御", "格挡", "招架"];
+const FX_BAND = { low: "下盘", mid: "中段", high: "上段" };
+const FX_DEFAULT_FAN = "对手被这一下打得重心一乱，出手节奏被抢走";
+const _fxCache = new Map();          // key → 切好的 { ming, fan }
+
+function _fxNum(x) { return String(Math.round((+x || 0) * 1000) / 1000); }
+/** 秒数：不足 1 秒补到两位（0.1 → 0.10），读起来整齐；1 秒以上保持 1.4/3 这种写法 */
+function _fxSec(x) {
+  const r = Math.round((+x || 0) * 1000) / 1000;
+  return (Math.abs(r) < 1 && r !== 0) ? r.toFixed(2) : String(r);
+}
+function _fxSpan(rg, time) {
+  if (!(Array.isArray(rg) && rg.length === 2 && isFinite(rg[0]) && isFinite(rg[1]))) return "?";
+  const f = time ? _fxSec : _fxNum;
+  return f(rg[0]) + "~" + f(rg[1]);
+}
+function _fxTrim(s) { return _norm(s).replace(/[，,；;。、\s]+$/, ""); }
+
+/**
+ * 把一段完整效果文案切成两半：「命中」= 打出去是什么画面，「反馈」= 打中之后对手怎样。
+ * 旧库文案本来就是"…；命中时…"这种写法，所以这一步是**保真搬运**（不重写、不改字）。
+ */
+function _fxSplit(txt) {
+  const s = _norm(txt);
+  if (!s) return { ming: "", fan: "" };
+  let cut = -1;
+  for (let i = s.indexOf("命中"); i >= 0; i = s.indexOf("命中", i + 1)) {
+    if (i >= 6) { cut = i; break; }            // 一开头就"命中"的不算切点（那是句子主语）
+  }
+  if (cut < 0) {
+    const semi = s.indexOf("；") >= 0 ? s.indexOf("；") : s.indexOf(";");
+    if (semi > 6) return { ming: _fxTrim(s.slice(0, semi)), fan: _fxTrim(s.slice(semi + 1)) };
+    const comma = s.lastIndexOf("，");
+    if (comma > 6) return { ming: _fxTrim(s.slice(0, comma)), fan: _fxTrim(s.slice(comma + 1)) };
+    return { ming: s, fan: "" };
+  }
+  return { ming: _fxTrim(s.slice(0, cut)), fan: _fxTrim(s.slice(cut)) };
+}
+
+/** 取一条招式的命中/反馈两段（已有 fx 就用，没有就现场切并缓存） */
+function _fxParts(m) {
+  if (!m) return { ming: "", fan: "" };
+  if (m.fx && (m.fx.ming || m.fx.fan)) return m.fx;
+  const k = String(m.key || m.zh || "");
+  if (k && _fxCache.has(k)) return _fxCache.get(k);
+  const p = _fxSplit(m.effect);
+  if (k) _fxCache.set(k, p);
+  return p;
+}
+
+/** 防守/闪避类？→ 效果按精简三段写（用户：这类不用描述那么详细） */
+function fxSimple(m) {
+  const tags = (m && m.tags) || [];
+  return !!(m && m.category === "防御") || tags.some(t => FX_DEF_TAGS.indexOf(t) >= 0);
+}
+
+/**
+ * 生成五段式效果文案。
+ * 进攻/移动/法术：起手（准备 a~b 秒）｜发力（有效 c~d 秒）｜命中（距离·扇角·高度带）｜余势（收招 e~f 秒）｜反馈
+ * 防守/闪避类：  起手（约 a~b 秒）｜身法（距离·有效窗口）｜收势（收招 e~f 秒）
+ */
+function fxOf(m) {
+  if (!m) return "";
+  const t = m.timing || {};
+  const parts = _fxParts(m);
+  const qi = _fxTrim(m.prep), fa = _fxTrim(m.act), yu = _fxTrim(m.follow);
+  const simple = fxSimple(m);
+  const meta = [];
+  if (Array.isArray(m.range) && m.range.length === 2) meta.push(_fxSpan(m.range) + " 米");
+  if (simple) {
+    meta.push("有效 " + _fxSpan(t.active, true) + " 秒");
+    return "起手：" + qi + "（约 " + _fxSpan(t.charge, true) + " 秒）"
+      + "｜身法：" + parts.ming + "（" + meta.join(" · ") + "）"
+      + "｜收势：" + yu + "（收招 " + _fxSpan(t.recover, true) + " 秒）";
+  }
+  if (m.arc) meta.push("扇角 " + _fxNum(m.arc) + "°");
+  if (FX_BAND[m.band]) meta.push(FX_BAND[m.band]);
+  if ((m.tags || []).indexOf("自动追踪") >= 0) meta.push("自动追踪");
+  return "起手：" + qi + "（约 " + _fxSpan(t.charge, true) + " 秒）"
+    + "｜发力：" + fa + "（有效 " + _fxSpan(t.active, true) + " 秒）"
+    + "｜命中：" + parts.ming + (meta.length ? "（" + meta.join(" · ") + "）" : "")
+    + "｜余势：" + yu + "（收招 " + _fxSpan(t.recover, true) + " 秒）"
+    + "｜反馈：" + (parts.fan || FX_DEFAULT_FAN);
+}
+
+/**
+ * 命中句专用：只取「命中＋反馈」。
+ * 理由：提示词的出招句已经写了起手/发力/距离（pipeline attack 行），
+ * 命中句再重复一遍就成啰嗦；两段拼起来正好是完整五段，不重不漏。
+ */
+function impactOf(m) {
+  if (!m) return "";
+  const parts = _fxParts(m);
+  if (fxSimple(m)) return fxOf(m);                 // 闪避/防御本来就短，整段给出
+  const meta = [];
+  if (Array.isArray(m.range) && m.range.length === 2) meta.push(_fxSpan(m.range) + " 米");
+  if (m.arc) meta.push("扇角 " + _fxNum(m.arc) + "°");
+  return "命中：" + parts.ming + (meta.length ? "（" + meta.join(" · ") + "）" : "")
+    + "｜反馈：" + (parts.fan || FX_DEFAULT_FAN);
+}
+
+/** 拆成结构化数组，供 UI / 校验用：{ label, text }[] */
+function segmentsOf(m) {
+  const s = fxOf(m);
+  const labels = fxSimple(m) ? FX_LABELS_SIMPLE : FX_LABELS;
+  const out = [];
+  s.split("｜").forEach((seg, i) => {
+    const p = seg.indexOf("：");
+    out.push({ label: p >= 0 ? seg.slice(0, p) : (labels[i] || ""), text: p >= 0 ? seg.slice(p + 1) : seg });
+  });
+  return out;
+}
 
 // ── 索引与查询 ──────────────────────────────────────────────────────────────
 const byKey = new Map();
@@ -442,6 +643,10 @@ function _index(mv) {
 }
 
 SEED.forEach(_index);
+
+// 内置招式：把原本文案的 effect 现场组装成五段式
+// （原文切成「命中／反馈」两半存进 fx，五段文案由本条自己的时间/距离/扇角生成）
+SEED.forEach(m => { m.fx = _fxParts(m); m.effect = fxOf(m); });
 
 /** 全部招式（内置 + 自动入库） */
 function all() { return SEED.concat(AUTO); }
@@ -492,6 +697,20 @@ const AIR_ACT = {
   high: ["自肩后高举劈落", "自上而下压下来", "从头顶斜着剖下一线"]
 };
 
+/**
+ * 把"命中/反馈"两段原文 + 条目参数打包成一条可用的描述集。
+ * 返回 effect 是五段式文案；fx 是两段原文（入库后 fxOf 还会用条目最终的时间/距离再生成一次）。
+ */
+function _fxPack(o) {
+  const parts = { ming: _fxTrim(o.ming), fan: _fxTrim(o.fan) };
+  const tmp = {
+    key: o.key || "", prep: o.prep, act: o.act, follow: o.follow, fx: parts,
+    timing: o.timing, range: o.range, arc: o.arc, band: o.band,
+    tags: o.tags, category: o.category
+  };
+  return { prep: o.prep, act: o.act, follow: o.follow, fx: parts, effect: fxOf(tmp) };
+}
+
 function autoDescribe(opt) {
   opt = opt || {};
   const w = opt.weapon || "none";
@@ -503,6 +722,14 @@ function autoDescribe(opt) {
   const tierWord = (opt.tier || 5) >= 7 ? "气劲透体，连空气都被推出一圈涟漪，" : "";
   const card = (opt.effect || "").trim();
   const tags = opt.tags || [];
+  // 卡面自带的文案（用户写的"一挥手江河倒灌"这类）→ 缀在**命中**段，
+  // 不再另起一句，这样五段结构不被破坏（用户要求：以后所有招式都按这个格式）
+  const tail = card ? "；" + card.replace(/[。；]$/, "") : "";
+  const pack = (prep, act, ming, fan, follow) => _fxPack({
+    prep: prep, act: act, ming: ming + tail, fan: fan, follow: follow,
+    timing: opt.timing, range: opt.range, arc: arc, band: band, tags: tags,
+    category: opt.category, key: opt.key
+  });
   const isSpell = opt.category === "法术" || tags.indexOf("术法") >= 0 || tags.indexOf("气功") >= 0
                   || tags.indexOf("剑气") >= 0 || tags.indexOf("掌风") >= 0 || tags.indexOf("指法") >= 0;
 
@@ -510,19 +737,18 @@ function autoDescribe(opt) {
   if (isSpell) {
     const prep = "沉腰坐马、双掌在身侧聚气，掌心那一点气团由小涨大、亮得照出半张脸的轮廓，衣袍被气劲顶得向后飘";
     const act = "双掌（指）前送，气劲脱手成形——化作一道明亮的气形直扑对手，飞行途中还顺着对手的移动微微修正方向";
-    const effect = tierWord + "气形划破雨幕，把沿途的雨丝灼成一片白汽、照得两侧物件都失了颜色；"
-      + "命中时当胸炸开，气浪呈半圆向外掀，对手双脚离地向后滑出数米，衣袍与碎石被一并卷起"
-      + (card ? "；" + card.replace(/[。；]$/, "") : "");
-    return { prep, act, effect, follow: "气劲出手后立刻收势回气，指尖余芒未散，准备续下一发" };
+    const ming = tierWord + "气形划破雨幕，把沿途的雨丝灼成一片白汽、照得两侧物件都失了颜色";
+    const fan = "命中时当胸炸开，气浪呈半圆向外掀，对手双脚离地向后滑出数米，衣袍与碎石被一并卷起";
+    return pack(prep, act, ming, fan, "气劲出手后立刻收势回气，指尖余芒未散，准备续下一发");
   }
 
   // ── 轻功/空中招：跃起 → 空中姿态 → 落地砸出水环 ───────────────────────
   if (air || opt.category === "轻功") {
     const prep = "屈膝蓄力、兵器后引，起跳前肩背先动、脚下才蹬地，落点已经在眼里";
     const act = "腾空后收腿转体，借下坠的势能把全身重量灌进这一击，落地时双足砸出一圈水环";
-    const effect = "人影自半空压下来，刃光像一道自天而降的白线；落地砸出的水环向外炸开，刃锋过处雨幕被整齐切开"
-      + (card ? "；" + card.replace(/[。；]$/, "") : "");
-    return { prep, act, effect, follow: "落地屈膝卸力，顺势贴地扫腿或直接起身再劈" };
+    const ming = "人影自半空压下来，刃光像一道自天而降的白线，落地双足砸出一圈水环";
+    const fan = "命中时刃锋自上而下贯入，落地砸出的水环向外炸开，刃锋过处雨幕被整齐切开";
+    return pack(prep, act, ming, fan, "落地屈膝卸力，顺势贴地扫腿或直接起身再劈");
   }
 
   const shape = arc >= 150 ? "横扫" : arc >= 90 ? "斜斩" : arc >= 30 ? "压劈" : "直刺";
@@ -530,11 +756,9 @@ function autoDescribe(opt) {
     : band === "low" ? "身形骤然下沉，兵器收到膝下，刃尖指向地面"
       : "侧身而立、兵器横于身前，目锁对手中线，脚下暗含半步";
   const act = (AIR_ACT[band] || AIR_ACT.mid)[0] + "，" + (w === "none" ? "拳掌" : "兵器") + "走出一条干净的" + shape + "线";
-  const effect = tierWord + img.light + "划破雨幕，" + img.sound + "压过雨声；"
-    + "命中时" + img.hit + "，对手被这一" + shape + "带得脚步一乱、向侧后滑出半步，"
-    + "水花与火星一起炸开" + (card ? "；" + card.replace(/[。；]$/, "") : "");
-  const follow = "收势不急不躁，兵器回到身前中位，顺势转腕准备下一手";
-  return { prep, act, effect, follow };
+  const ming = tierWord + img.light + "划破雨幕，" + img.sound + "压过雨声";
+  const fan = "命中时" + img.hit + "，对手被这一" + shape + "带得脚步一乱、向侧后滑出半步，水花与火星一起炸开";
+  return pack(prep, act, ming, fan, "收势不急不躁，兵器回到身前中位，顺势转腕准备下一手");
 }
 
 /**
@@ -573,7 +797,11 @@ function register(entry) {
   mv.prep = rich(entry.prep, 8) || auto.prep;
   mv.act = rich(entry.act, 8) || auto.act;
   mv.follow = rich(entry.follow, 6) || auto.follow;
-  mv.effect = rich(entry.effect, 24) || auto.effect;
+  // 效果**统一按五段式生成**：起手/发力/余势取上面定稿的 prep/act/follow，
+  // 命中/反馈取切好的两段（调用方给的文案已在自动描述里缀进命中段）。
+  // 于是"以后所有招式"都是同一格式，且数字来自本条自己的 timing/range/arc。
+  mv.fx = (entry.fx && (entry.fx.ming || entry.fx.fan)) ? entry.fx : (auto.fx || _fxSplit(mv.effect));
+  mv.effect = fxOf(mv);
   AUTO.push(mv);
   _index(mv);
   return mv;
@@ -615,6 +843,10 @@ function userPath() {
     if (typeof require !== "function") return null;
     const g = (typeof globalThis !== "undefined") ? globalThis : {};
     if (g.__exeShell || typeof document !== "undefined") return null;   // 浏览器形态走 localStorage
+    // 用户招式库路径可被 H3_MOVES_USER 覆盖：测试要**可复现**就必须每条用例从同一份库出发
+    //   （2026-10-01：全量跑 tests/*.test.js 时，前面的用例把库喂大，后面的对局招式池变了，
+    //    「高等级白打率」这类断言就会假红；单跑该文件却又通过 —— 根因就是这个共享可写文件）。
+    try { if (typeof process !== "undefined" && process.env && process.env.H3_MOVES_USER) return process.env.H3_MOVES_USER; } catch (e) {}
     return require("path").join(__dirname, "moves-user.json");
   } catch (e) { return null; }
 }
@@ -647,6 +879,7 @@ function loadUser() {
   let n = 0;
   data.forEach(m => {
     if (get(m.zh || m.key)) return;
+    _index(m);          // 先自愈缺字段（timing/range/arc/band）——五段文案要用到它们
     // 质量闸：早期版本生成的自动条目描述太弱（甚至只有一句卡面文案）→ 用当前生成器重写
     if (m.source === "auto") {
       const auto = autoDescribe({ zh: m.zh, weapon: (m.weapons || [])[0], band: m.band, arc: m.arc,
@@ -655,9 +888,13 @@ function loadUser() {
       if (!m.prep || m.prep.length < 10) m.prep = auto.prep;
       if (!m.act || m.act.length < 10) m.act = auto.act;
       if (!m.follow || m.follow.length < 8) m.follow = auto.follow;
-      if (!m.effect || m.effect.length < 30) m.effect = auto.effect;
+      if (!m.fx || (!m.fx.ming && !m.fx.fan)) {
+        // 老条目存的是"一句短语式"效果 → 切成命中/反馈两段；已是五段式的沿用原文
+        m.fx = (m.effect && m.effect.length >= 40) ? _fxSplit(m.effect) : auto.fx;
+      }
     }
-    AUTO.push(m); _index(m); n++;
+    m.effect = fxOf(m);     // 统一五段式；下次落盘就是新格式
+    AUTO.push(m); n++;
   });
   return n;
 }
@@ -667,6 +904,8 @@ loadUser();
 const API = {
   VERSION: MOVE_LIB_VERSION,
   SEED, all, get, query, variantsOf, register, paramsOf, stats, autoDescribe,
+  // 效果五段式：fxOf 全文 / impactOf 命中句用（命中＋反馈）/ segmentsOf 结构化 / fxSimple 是否精简格式
+  fxOf, impactOf, segmentsOf, fxSimple, FX_LABELS, FX_LABELS_SIMPLE,
   saveUser, loadUser, userPath,
   count: () => all().length
 };

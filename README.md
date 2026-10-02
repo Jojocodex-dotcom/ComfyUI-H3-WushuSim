@@ -186,6 +186,12 @@ python tools/selftest.py                 python tools/selftest.py --src /path/to
 
 ## 内核快照与升级
 
+> **快照更新（2026-10-02）**：同步自 H3 武斗模拟器 v9.12 的最新内核 ——
+> 新增/变更：**御空飞行档位**（角色卡「专飞」＝不论等级按飞行档结算：真悬停 / 空中招数 / 滞空预算）、
+> **H 系机检 8 条**（首镜时间戳、时间码递增、`<Subject N>` 定义超限或未引用、否定式、画外声闭口证据、并列主体、悬空指代）、
+> 招式/套路/模板库与 `combat-logic`、`pipeline`、`rig` 的同步更新。
+> 快照清单与逐文件 sha256 见 `wushu_sim/js/MANIFEST.json`。
+
 内核 JS 随包发布（`wushu_sim/js/`，含 `MANIFEST.json` 记录每个文件的 sha256 与版本）：
 
 ```bash

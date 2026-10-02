@@ -1,47 +1,47 @@
 {
-  "synced_at": "2026-09-22T16:12:11+08:00",
-  "source": "E:\\wushulong\\H3武斗模拟器-v9.12",
+  "synced_at": "2026-10-02T08:11:16+08:00",
+  "source": "H:\\wushulong\\H3武斗模拟器-v9.12",
   "versions": "{\"engine\": \"sim3d-0.6\", \"combatLogic\": \"fight-logic-0.2\", \"ltx2\": \"ltx2-step2-0.2\"}",
   "files": {
     "sim3d/moves.js": {
-      "sha256": "17610416d31de36726e9524ccbcc166de3b914fdd7ec6631efa456d555ce2921",
-      "bytes": 47860
+      "sha256": "d850231e981b972aae936551e4f0f2c88ae24492238ab4bfa1ffb2ea349d3fd6",
+      "bytes": 63663
     },
     "sim3d/engine.js": {
-      "sha256": "a42682867c5478036cfb867cf7f65dfcaa4da33c93ab42caf5a5c8c85760afcb",
-      "bytes": 119854
+      "sha256": "af32a6dff06aed6f99dc2140ce8167dcf1324095d173f7857ec1b9dbe807ccc4",
+      "bytes": 269169
     },
     "sim3d/pipeline.js": {
-      "sha256": "2b0041c671b5310c5f83d12e6d0b6f796c4ba7e6b21f6212661610825f7de08a",
-      "bytes": 28107
+      "sha256": "2a1dafbc85c3ead8372f14f33b30970aed1e0fdb77ec976723277a2242a4d14c",
+      "bytes": 281045
     },
     "sim3d/combat-logic.js": {
-      "sha256": "30bd5593340c5818d55d13da8b407bda8b8eab94851df69b20241bf8bbb3f3e4",
-      "bytes": 50339
+      "sha256": "19b51251463a2972d2d7a391c6e3b512b62c5a4680c417d0df220907590bab10",
+      "bytes": 51818
     },
     "sim3d/rig.js": {
-      "sha256": "82421edfa30139419115f2f82ea7b0cd362ce38ccd6da1440bb5088d419c97eb",
-      "bytes": 23009
+      "sha256": "cefd635c99fcdaac0359e7cc35ef2caa4c92b6f22997bc378db44c625cd9d7bb",
+      "bytes": 31550
     },
     "sim3d/cli.js": {
       "sha256": "c54053798f8a5bd6005137a749c3cbdc76106213e2aeec6a1a2a3ccccdd7876f",
       "bytes": 14439
     },
     "h3lint.js": {
-      "sha256": "ebc9bc82a7edc1e2f58224b9e4671ad0850404903c8da9368eb0782e518185f7",
-      "bytes": 33572
+      "sha256": "a6e31c0bf73b92081efebcb7c6f7a7bf6e683886b38f4ab7703014d2d23fb113",
+      "bytes": 111851
     },
     "h3tools.js": {
-      "sha256": "9bf50733001f849d00f0295153032d4d847ee16291849a2e734858fd2b73a296",
-      "bytes": 43951
+      "sha256": "ff0cff05f348e141991b1cf62c78a3abb938f50165a24f3926905389234f5cca",
+      "bytes": 44258
     },
     "ltx2/step2.js": {
       "sha256": "74fc20bcfa00e3f55f6387c6f69f2535e32135e9d7b4623a5b156f37ba700a0d",
       "bytes": 30105
     },
     "templates/axes.js": {
-      "sha256": "e7456bc44f62368f9a831ae2efbdbfa528f129e4102674f2f832325b87bcc0be",
-      "bytes": 32846
+      "sha256": "d8281b13bbc19b05c338a4444142d47509633ce88031f8df42e587ff0cdd9e08",
+      "bytes": 32860
     },
     "templates/corpus-data.js": {
       "sha256": "f389cec5d4cae377e53047e1baf6e3862bea3ffcc19f3778903e34929ed9f6a8",

@@ -223,7 +223,7 @@
       advantage: "A 长于连续突进；B 长于读招反击",
       sounds: { amb: "夜晚的风、远处电车", act: "衣料呼啸、刀锋破空、碎石四散", human: "喊招、咬牙、急促呼吸" },
       negatives: ["静止画充数", "特效掩盖动作", "背景与前镜不一致", "无重量感"],
-      cameraPool: ["速度线推近", "快速横切", "仰角必杀", "撞击定格", "拉开看余波"],
+      cameraPool: ["速度线推近", "快速横切", "仰角必杀", "撞击瞬间 0.35× 慢放", "拉开看余波"],
       source: "authored（动画打斗通用写法；corpus 参考 fast-paced-15-second-16-9-anime-opening 一类）"
     },
     {
@@ -259,7 +259,7 @@
       advantage: "A 长于爆发与冲击；B 长于位移与预判",
       sounds: { amb: "城市交通噪底、警报声", act: "冲击波低频轰响、玻璃碎裂、金属变形", human: "短促的怒吼、落地时的吐气" },
       negatives: ["物理完全失效", "无后果的破坏", "现代品牌露出", "披风/服饰前后不一致"],
-      cameraPool: ["低机位仰拍冲击", "沿击飞方向追随", "高位俯瞰街区", "快速环绕", "定格收尾"],
+      cameraPool: ["低机位仰拍冲击", "沿击飞方向追随", "高位俯瞰街区", "快速环绕", "慢放收尾"],
       source: "authored（超能动作通用写法；corpus 参考 urban-street-superpowered-punch-action-sequence-712509）"
     },
     {
