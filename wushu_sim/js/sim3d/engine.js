@@ -18,7 +18,8 @@
 })(typeof globalThis !== "undefined" ? globalThis : this, function () {
   "use strict";
 
-  const VERSION = "sim3d-2.0";
+  const VERSION = "sim3d-2.1";
+  const SKILLS = typeof module === "object" && module.exports ? require("./skill-catalog.js") : globalThis.H3_SKILL_CATALOG;
   const ACTIONS = typeof module === "object" && module.exports ? require("./action-system.js") : globalThis.H3_ACTIONS;
   const CONTRACT = typeof module === "object" && module.exports ? require("../core/combat-contract.js") : globalThis.H3_CONTRACT;
   const CHOREOGRAPHY = typeof module === "object" && module.exports ? require("./choreography.js") : globalThis.H3_CHOREOGRAPHY;
@@ -1494,6 +1495,12 @@
   // ── 远程法术（角色卡「法术」组）：隔空释放，不必贴脸 ────────────────────
   const SPELL_CAST = 0.34;                   // 施法前摇：可被打断（挨打就散功）
   function startCast(sim, f, sp) {
+    if (sim.t < (f.castReadyAt || 0)) return false;
+    const requestedForm=SKILLS?.get(sp?.formKey||sp?.zh);if(requestedForm?.requiresAir&&f.z<=.4)return false;
+    const named = SKILLS?.select(sp?.formKey || sp?.zh, f.formCursor || 0, f.z > .4);
+    if (named && (f.prof.tier < named.tiers[0] || named.requiresAir && f.z <= .4)) return false;
+    const originalSpell = sp;
+    if (named) sp = {...sp,zh:named.zh,formKey:named.key,reach:Math.min(sp.reach||18,named.targeting?.range||18)};
     if (!f.spells || !f.spells.length || !sp) return false;
     if ((f.spellCd[sp.id] || 0) > sim.t) return false;
     const cost = 14 + (sp.damage || 20) * 0.35;
@@ -1529,6 +1536,7 @@
         });
       }
     }
+    if(named){eff={...eff,zh:named.zh,prep:named.prep,fire:named.act,shape:named.fx?.shape||named.fx?.form,hit:SKILLS.fxDescription(named,'hit'),charge:named.timing.charge,release:named.timing.travel||named.timing.recover,form:named,particles:named.fx?.particles,light:named.fx?.light};f.formCursor=(f.formCursor||0)+1;}
     const cRange0 = scaledRange(eff.charge, f.prof.tier, f.qi);
     // ── 施法时间（2026-09-25 用户要求"给足法术施法时间"）────────────────────
     //   蓄力时长 = 招式档 × 风格档（仙神斗法 1.9） × 等级档（7 级起每级 +28%）。
@@ -1544,7 +1552,7 @@
     f.castDur = pickInRange(sim, cRange);
     f.castQuick = cRange !== cRange0;
     f.castEff = eff; f.castRange = cRange;
-    f.state = "cast"; f.castT = 0; f.castSpell = sp;
+    f.state = "cast"; f.castT = 0; f.castSpell = sp;f.castSourceId=originalSpell.id;
     // 施法要正对目标（用户：「法术释放不是攻击对手」）：起手即对准，蓄力期间还会跟着对手微调
     {
       const toOpp1 = Math.atan2(opp0.y - f.y, opp0.x - f.x);
@@ -1563,12 +1571,12 @@
     sim.events.push({ t: +sim.t.toFixed(3), type: "spell_cast", who: f.id, tech: sp.zh, key: "spell", link: !!sp.linkOnly,
                       x: +f.x.toFixed(3), y: +f.y.toFixed(3), z: +f.z.toFixed(3),
                       dist: +Math.hypot(opp.x - f.x, opp.y - f.y).toFixed(2), reach: sp.reach,
-                      chargeRange: cRange, chargeT: f.castDur, chargeMul: +chargeMul.toFixed(2), shape: eff.shape, track: !!eff.track,
+                      formKey:named?.key||null, targeting:named?.targeting||null, vfx:named?.fx||null, chargeRange: cRange, chargeT: f.castDur, chargeMul: +chargeMul.toFixed(2), shape: eff.shape, track: !!eff.track,
                       prep: eff.prep, effect: eff.fire, radius: eff.radius,
                       move: { zh: eff.zh || sp.zh, prep: eff.prep, act: eff.fire, effect: eff.hit,
-                              timing: { charge: cRange, active: [0.05, 0.10], recover: eff.release || [0.2, 0.36] },
+                              timing: { charge: cRange, active: [0.05, 0.10], recover: named?.timing.recover || eff.release || [0.2, 0.36] },
                               range: eff.range || null, arc: 26, band: "mid",
-                              source: (MOVES && MOVES.get(sp.zh)) ? MOVES.get(sp.zh).source : "auto" } });
+                              source: named ? "repertoire" : (MOVES && MOVES.get(sp.zh)) ? MOVES.get(sp.zh).source : "auto" } });
     // 灵光/罡气护体：特效档 5 起，起手蓄气时体表亮起一圈光膜（aura 事件，供 3D 预览与提示词用）
     const FA = f.fx || {};
     if (((FA.level || 1) >= 5) && !f.auraOn) {
@@ -1606,7 +1614,7 @@
       vz: 0, vCap: 3.5 });
     sim.events.push({ t: +sim.t.toFixed(3), type: "spell_release", who: f.id, tech: sp.zh, shot: id,
                       x: +f.x.toFixed(3), y: +f.y.toFixed(3), z: +(f.z + 1.15).toFixed(3), spd: +spd.toFixed(1), dist: +d.toFixed(2),
-                      releaseRange: rRange0, releaseT: flyT, actualFly: actualFly, shape: eff.shape, track: track, fire: eff.fire, radius: eff.radius });
+                      formKey:sp.formKey||null, targeting:eff.form?.targeting||null, vfx:eff.form?.fx||null, recoverT:f.castRecovery||0, releaseRange: rRange0, releaseT: flyT, actualFly: actualFly, direction:+a.toFixed(4), shape: eff.shape, track: track, fire: eff.fire, radius: eff.radius });
     f.stats.castsDone = (f.stats.castsDone || 0) + 1;
     // ── 特效密度（仙神档）：脱手那一刻在身周炸开一圈气劲；7 级以上再抬一次"抬头能看见"的天象 ──
     //   目的：让"特效漫天飞"变成内核真的产生的事件流（证据里的 counts 与【特效清单】都靠它）。
@@ -2609,7 +2617,7 @@
     f.airHold = 0; f.airAtkLeft = 0; f.airAtkTimer = 0;
     f.wallT = 0; f.wasHover = false; f.wasStall = false;      // 落地＝离开滞空（不复位的话整场只会记一次 air_stall）
     // 落地不打断正在出的招（俯冲命中落地也算数），只给落地屈膝与硬直；否则会出现姿态硬切
-    const busy = f.state === "attack" || f.state === "dodge" || f.state === "cast" || f.state === "hitstun" || f.state === "stagger";
+    const busy = f.state === "recover" && sim.t < f.recoverUntil || f.state === "attack" || f.state === "dodge" || f.state === "cast" || f.state === "hitstun" || f.state === "stagger";
     if (f.state !== "down" && !busy) { f.state = hard ? "land" : f.state; f.landLock = hard ? 0.22 : 0.10; }
     else if (busy && hard) f.landLock = Math.max(f.landLock, 0.16);
     f.post = "stand";
@@ -2784,13 +2792,16 @@
         const c=commands[commandIndex++], f=c.who==='A'?A:B, opp=f===A?B:A;
         let reason='';
         if(f.hp<=0)reason='角色已被击败';
-        else if(lockCheck(f))reason='前一动作尚未结束';
+        else if(lockCheck(f)||f.state==='recover'&&sim.t<f.recoverUntil)reason='前一动作尚未结束';
+        else if(c.kind==='attack'&&c.variant&&!([...VARIANTS,...AIR_VARIANTS].some(v=>v.key===c.variant)||SKILLS?.get(c.variant)?.category==='拳脚'&&f.wpnKey==='none'))reason='未配置该近战招式';
+        else if(c.kind==='cast'&&!f.spells.some(sp=>sp.id===c.variant||sp.zh===c.variant||SKILLS?.get(c.variant)&&String(sp.zh).includes(SKILLS.get(c.variant).family)))reason='未配置该招式或法术';
         else if(c.kind==='flight'&&!f.mob.flight)reason='等级未解锁飞行';
         else if(['roll','down'].includes(c.kind)&&f.z>.12)reason='动作需要先落地';
         else if(['roll','dodge'].includes(c.kind)&&f.rules.noDodge)reason='规则禁止闪避';
         if(reason){sim.events.push({t:+sim.t.toFixed(3),type:'command_rejected',who:f.id,kind:c.kind,reason});continue;}
         sim.events.push({t:+sim.t.toFixed(3),type:'command_start',who:f.id,kind:c.kind,scheduled:c.t});
-        if(c.kind==='land'){f.mustLand=true;f.launched=false;f.vz=Math.min(f.vz,-1);}
+        if(c.kind==='cast'){const form=SKILLS?.get(c.variant),sp=f.spells.find(x=>x.id===c.variant||x.zh===c.variant||form&&String(x.zh).includes(form.family));if(startCast(sim,f,form?{...sp,formKey:form.key}:sp)===false)sim.events.push({t:+sim.t.toFixed(3),type:'command_rejected',who:f.id,kind:c.kind,reason:'施法空间、体力、等级或冷却不满足'});}
+        else if(c.kind==='land'){f.mustLand=true;f.launched=false;f.vz=Math.min(f.vz,-1);}
         else if(c.kind==='launch'){
           if(!o.rehearsal){sim.events.push({t:+sim.t.toFixed(3),type:'command_rejected',who:f.id,kind:c.kind,reason:'受击演练仅在排练模式可用'});continue;}
           f.launched=true;f.launchedAt=sim.t;f.vz=Math.sqrt(2*G_Z*1.4);f.state='hitstun';f.hitstun=.5;
@@ -2798,7 +2809,7 @@
         }else if(c.kind==='down'){
           if(!o.rehearsal){sim.events.push({t:+sim.t.toFixed(3),type:'command_rejected',who:f.id,kind:c.kind,reason:'倒地演练仅在排练模式可用'});continue;}
           ACTIONS.beginDown(sim,f,1.6);sim.events.push({t:+sim.t.toFixed(3),type:'knockdown',who:f.id,z:f.z,rehearsal:true});
-        }else{f.intent={kind:c.kind==='flight'?'takeoff':c.kind,dir:c.kind==='leap'?'up':c.dir,reason:c.kind==='leap'?'airStrike':'choreography',variant:c.kind==='attack'?([...VARIANTS,...AIR_VARIANTS].find(v=>v.key===c.variant)||pickVariant(f,opp,f.rng)):undefined};steer(sim,f,opp,DT,f.rng);f.decideT=c.hold||.15;}
+        }else{f.intent={kind:c.kind==='flight'?'takeoff':c.kind,dir:c.kind==='leap'?'up':c.dir,reason:c.kind==='leap'?'airStrike':'choreography',variant:c.kind==='attack'?([...VARIANTS,...AIR_VARIANTS].find(v=>v.key===c.variant)||(SKILLS?.get(c.variant)?.category==='拳脚'&&f.wpnKey==='none'?{...VARIANTS.find(v=>v.key==='thrust')||VARIANTS[0],zh:SKILLS.get(c.variant).zh,routine:c.variant}:pickVariant(f,opp,f.rng))):undefined};steer(sim,f,opp,DT,f.rng);f.decideT=c.hold||.15;}
       }
       // 逐帧交替处理顺序：否则"后处理的一方"总是拿到对方的最新位置，
       // 会形成系统性优势（同级同风格对局会变成一边倒）
@@ -2806,6 +2817,7 @@
       for (const f of list) {
         const opp = f === A ? B : A;
         // 计时器
+        if(f.state==='recover'&&sim.t>=f.recoverUntil){f.state='idle';sim.events.push({t:+sim.t.toFixed(3),type:'cast_recovery_end',who:f.id});}
         f.hitstun = Math.max(0, f.hitstun - DT);
         if (f.iframes > 0) f.iframes = Math.max(0, f.iframes - DT);
         if (f.lastHitT != null && sim.t - f.lastHitT > 1.4 && f.hitsTaken) f.hitsTaken = 0;
@@ -2911,7 +2923,7 @@
         if (f.state !== "cast") { f.castSpell = null; f.castT = 0; f.auraOn = false; }
         if (f.state === "cast" && f.castSpell) {
           f.castT += DT;
-          if (f.castT >= (f.castDur || SPELL_CAST)) { releaseSpell(sim, f, f.castSpell); f.state = "idle"; f.castSpell = null; f.castT = 0; f.castDur = 0; f.auraOn = false; }
+          if (f.castT >= (f.castDur || SPELL_CAST)) {const form=f.castEff?.form;f.castRecovery=form?pickInRange(sim,form.timing.recover):.35;releaseSpell(sim, f, f.castSpell);f.castReadyAt=sim.t+f.castRecovery+(form?.timing.gap||.25);if(f.castSourceId)f.spellCd[f.castSourceId]=Math.max(f.spellCd[f.castSourceId]||0,f.castReadyAt+(form?.timing.cooldown||0));f.state="recover";f.recoverUntil=sim.t+f.castRecovery;f.castSpell=null;f.castT=0;f.castDur=0;f.auraOn=false;sim.events.push({t:+sim.t.toFixed(3),type:'cast_recovery',who:f.id,duration:f.castRecovery,readyAt:f.castReadyAt});}
         }
         // 招式推进
         if (f.state === "attack" && f.tech) {
@@ -3608,7 +3620,7 @@
       sim.stats_endShots = sim.shots.length;
       sim.shots.length = 0;
     }
-    function lockCheck(f) { return ACTIONS.locked(f) || f.state === "attack" || f.state === "dodge" || f.state === "cast" || f.state === "hitstun" || f.state === "stagger" || f.state === "down" || f.state === "land"; }
+    function lockCheck(f) { return ACTIONS.locked(f) || f.state === "recover" && sim.t < (f.recoverUntil||0) || f.state === "attack" || f.state === "dodge" || f.state === "cast" || f.state === "hitstun" || f.state === "stagger" || f.state === "down" || f.state === "land"; }
     // 真实阶段进度 phaseP（0=起手开始，1=收招结束）：GPT 9.13 的 rig 用它驱动姿态插值 ——
     //   比按 tp 猜阶段边界准，起手末/判定末的姿态会正好落在阶段切换上。
     function phasePOf(f) { return (f.state === "attack" && f.dur)

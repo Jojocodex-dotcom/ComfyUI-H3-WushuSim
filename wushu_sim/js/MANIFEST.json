@@ -1,91 +1,11 @@
 {
-  "synced_at": "2026-10-02T08:16:45+08:00",
-  "source": "H:\\wushulong\\H3武斗工作室-v10\\_from-downloads\\v12-source\\h3",
-  "versions": "{\"engine\": \"sim3d-2.0\", \"combatLogic\": \"fight-logic-0.2\", \"ltx2\": \"ltx2-step2-0.2\"}",
+  "synced_at": "2026-10-02T22:40:25+08:00",
+  "source": "H:\\wushulong\\H3-Studio-v17.1-源码\\h3",
+  "versions": "{\"engine\": \"sim3d-2.1\", \"combatLogic\": \"fight-logic-0.2\", \"ltx2\": \"ltx2-step2-0.2\"}",
   "files": {
-    "sim3d/moves.js": {
-      "sha256": "d850231e981b972aae936551e4f0f2c88ae24492238ab4bfa1ffb2ea349d3fd6",
-      "bytes": 63663
-    },
-    "sim3d/engine.js": {
-      "sha256": "b79626e28428c857f2ebe746bb3e9bdb1a6549896060f57b7d65e4ae95c60a98",
-      "bytes": 273777
-    },
-    "sim3d/pipeline.js": {
-      "sha256": "c30add02cc73e1db38df4879ada2f8b80e0e9e476d053bf0af45cbf0b8882233",
-      "bytes": 283643
-    },
-    "sim3d/combat-logic.js": {
-      "sha256": "fa7a91506cffedc9e5ea460fbf0c50a32839c74b50a0ca8678f07566629ba064",
-      "bytes": 51820
-    },
-    "sim3d/rig.js": {
-      "sha256": "2bb3b5d281708c5816e4ffd2fa07c669ed5a6109f62a6175828073b4b54ef0e1",
-      "bytes": 32580
-    },
-    "sim3d/cli.js": {
-      "sha256": "c54053798f8a5bd6005137a749c3cbdc76106213e2aeec6a1a2a3ccccdd7876f",
-      "bytes": 14439
-    },
-    "sim3d/routines.js": {
-      "sha256": "2576751bf4afd477acafbac517bb0b1c9bfc43e3fe492bdea87928289afe0094",
-      "bytes": 44176
-    },
-    "sim3d/action-system.js": {
-      "sha256": "11c41175759197bbc8e5b5dc82eaf2b1fcd3a296656de899f89312fa389f29be",
-      "bytes": 3318
-    },
-    "sim3d/choreography.js": {
-      "sha256": "6232d25235d791a222349592fee1f2e2533b6763c08c1955b220da9a29d8c72e",
-      "bytes": 919
-    },
-    "sim3d/ai-rehearsal.js": {
-      "sha256": "875c2e7e218f88e529a8a9f0db2dd025fec7a4dd9026eeccb224c2018b461484",
-      "bytes": 3093
-    },
-    "sim3d/diag.js": {
-      "sha256": "fc3265cd9bd65cb63c0bf39d09ca369c53b870bdb64a5d70b503b92174bebe31",
-      "bytes": 1543
-    },
     "core/combat-contract.js": {
       "sha256": "18b9aa8d1975df768399f4867165f53dd9a9f073e78493a8f27aad6f137d2d3f",
       "bytes": 1485
-    },
-    "h3lint.js": {
-      "sha256": "c7ddefc38e051e598921a67aba2fec2c6695073d026c8fbb478f9881db69a000",
-      "bytes": 112275
-    },
-    "h3tools.js": {
-      "sha256": "ff0cff05f348e141991b1cf62c78a3abb938f50165a24f3926905389234f5cca",
-      "bytes": 44258
-    },
-    "ltx2/step2.js": {
-      "sha256": "74fc20bcfa00e3f55f6387c6f69f2535e32135e9d7b4623a5b156f37ba700a0d",
-      "bytes": 30105
-    },
-    "templates/axes.js": {
-      "sha256": "d8281b13bbc19b05c338a4444142d47509633ce88031f8df42e587ff0cdd9e08",
-      "bytes": 32860
-    },
-    "templates/corpus-data.js": {
-      "sha256": "f389cec5d4cae377e53047e1baf6e3862bea3ffcc19f3778903e34929ed9f6a8",
-      "bytes": 39043
-    },
-    "templates/corpus.js": {
-      "sha256": "20bad7919e9882f282bc346cb985cabc071ee5fe6ec3bc5613d6bfdf9a70d4af",
-      "bytes": 5452
-    },
-    "templates/library.js": {
-      "sha256": "0f078df138c6836092f4799ae077784784e2540555ced24e03a68a09a7fbdfb8",
-      "bytes": 15689
-    },
-    "drama/templates/axes.js": {
-      "sha256": "f0fdb7c6359395227a8efa2cf70e147ee93c324a2ea6b9658f7593388c300145",
-      "bytes": 29364
-    },
-    "drama/templates/library.js": {
-      "sha256": "263b50a6f3039dc7103368cdac5840b0cd04da5f2e8920fb362b4e8fc46a0778",
-      "bytes": 20456
     },
     "drama/engine.js": {
       "sha256": "9817766822ff344cf86585ad1238dd70f4c67c6ebe17d07dbea0debacd74dd00",
@@ -102,6 +22,90 @@
     "drama/one-line.js": {
       "sha256": "b79a5ba2e999ad88859d18296b5a54f9744403b667bff01cedf4776bd871ce59",
       "bytes": 10612
+    },
+    "drama/templates/axes.js": {
+      "sha256": "f0fdb7c6359395227a8efa2cf70e147ee93c324a2ea6b9658f7593388c300145",
+      "bytes": 29364
+    },
+    "drama/templates/library.js": {
+      "sha256": "263b50a6f3039dc7103368cdac5840b0cd04da5f2e8920fb362b4e8fc46a0778",
+      "bytes": 20456
+    },
+    "h3lint.js": {
+      "sha256": "c7ddefc38e051e598921a67aba2fec2c6695073d026c8fbb478f9881db69a000",
+      "bytes": 112275
+    },
+    "h3tools.js": {
+      "sha256": "ff0cff05f348e141991b1cf62c78a3abb938f50165a24f3926905389234f5cca",
+      "bytes": 44258
+    },
+    "ltx2/step2.js": {
+      "sha256": "74fc20bcfa00e3f55f6387c6f69f2535e32135e9d7b4623a5b156f37ba700a0d",
+      "bytes": 30105
+    },
+    "sim3d/action-system.js": {
+      "sha256": "355c3e469713e7f7f5aac049c32c5bc93cab23713c80737150270cb36b19b59e",
+      "bytes": 3605
+    },
+    "sim3d/ai-rehearsal.js": {
+      "sha256": "52a5db85e88cc052d72504654d771159030e953e95da34e9dd0cbab6550fd550",
+      "bytes": 5111
+    },
+    "sim3d/choreography.js": {
+      "sha256": "2bdcffd5c4b7d060ae5126aaa6ce2ae399d125aeb4895d770e411489feed3d31",
+      "bytes": 926
+    },
+    "sim3d/cli.js": {
+      "sha256": "c54053798f8a5bd6005137a749c3cbdc76106213e2aeec6a1a2a3ccccdd7876f",
+      "bytes": 14439
+    },
+    "sim3d/combat-logic.js": {
+      "sha256": "fa7a91506cffedc9e5ea460fbf0c50a32839c74b50a0ca8678f07566629ba064",
+      "bytes": 51820
+    },
+    "sim3d/diag.js": {
+      "sha256": "fc3265cd9bd65cb63c0bf39d09ca369c53b870bdb64a5d70b503b92174bebe31",
+      "bytes": 1543
+    },
+    "sim3d/engine.js": {
+      "sha256": "f942baec1c3269fa4b0c1f61ab484556dd60acf58e381a926df3b026a0212bfe",
+      "bytes": 276662
+    },
+    "sim3d/moves.js": {
+      "sha256": "03c69bca772043921bde2c085167e641ee52073d992cea72018cc09d54bf6612",
+      "bytes": 64486
+    },
+    "sim3d/pipeline.js": {
+      "sha256": "d86f9db40725e5909f71b2ffd41069f11901c85783e38b517c54a946705dcf21",
+      "bytes": 286726
+    },
+    "sim3d/rig.js": {
+      "sha256": "2bb3b5d281708c5816e4ffd2fa07c669ed5a6109f62a6175828073b4b54ef0e1",
+      "bytes": 32580
+    },
+    "sim3d/routines.js": {
+      "sha256": "5414945907c7eb97293381d3b7b2f564c2685c39f0065cc8f34a38ff8e619d7d",
+      "bytes": 44912
+    },
+    "sim3d/skill-catalog.js": {
+      "sha256": "b72dfded2ddc4919d100a0ab8102cff1538d753178bb9039019cc413afc8ca42",
+      "bytes": 12768
+    },
+    "templates/axes.js": {
+      "sha256": "d8281b13bbc19b05c338a4444142d47509633ce88031f8df42e587ff0cdd9e08",
+      "bytes": 32860
+    },
+    "templates/corpus-data.js": {
+      "sha256": "f389cec5d4cae377e53047e1baf6e3862bea3ffcc19f3778903e34929ed9f6a8",
+      "bytes": 39043
+    },
+    "templates/corpus.js": {
+      "sha256": "20bad7919e9882f282bc346cb985cabc071ee5fe6ec3bc5613d6bfdf9a70d4af",
+      "bytes": 5452
+    },
+    "templates/library.js": {
+      "sha256": "0f078df138c6836092f4799ae077784784e2540555ced24e03a68a09a7fbdfb8",
+      "bytes": 15689
     }
   }
 }

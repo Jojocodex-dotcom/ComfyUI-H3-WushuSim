@@ -33,7 +33,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const VERSION = 'routine-lib-1.0';
+  const VERSION = 'routine-lib-2.0';
 
   /* 各意图的默认节奏（秒）与伤害系数：写套路时不用逐条重复 */
   const ACT = {
@@ -409,6 +409,9 @@
   ];
 
   /* ── 索引与查询 ───────────────────────────────────────────────────────── */
+  const C=typeof module==='object'&&module.exports?require('./skill-catalog'):globalThis.H3_SKILL_CATALOG;
+  if(C)C.forms.forEach(f=>{if(SEED.some(r=>r.zh===f.zh))return;SEED.push(Object.assign({},f,{chain:(C.repertoire(f.family)?.forms||[]).filter(k=>k!==f.key).slice(0,3),steps:f.steps.map((st,i)=>Object.assign({i:i+1,actZh:(ACT[st.act]||ACT.strike).zh},st))}));});
+  function schedule(r,rate=1){let at=0;const k=Math.max(.7,Math.min(1.7,rate));return (r?.steps||[]).map(st=>{const t=st.t.map(x=>Math.max(.05,x/k)),out={step:st,start:at,activeStart:at+t[0],activeEnd:at+t[0]+t[1],end:at+t[0]+t[1]+t[2]};at=out.end;return out;});}
   const byKey = new Map();
   SEED.forEach((r) => byKey.set(r.key, r));
 
@@ -489,6 +492,7 @@
     if (hit) return hit;
     hit = SEED.find((r) => n.indexOf(r.zh) >= 0 || r.zh.indexOf(n) >= 0);
     if (hit) return hit;
+    if(C?.repertoire(n)){const f=C.select(n);if(f)return byKey.get(f.key)||null;}
     const kw = [['冲拳', 'wc_chain'], ['日字', 'wc_chain'], ['问手', 'wc_wen'], ['摊', 'wc_tan_da'], ['拍', 'wc_pak'],
       ['掌', 'bg_dan'], ['拳', 'hung_kui'], ['桥', 'hung_tie'], ['棒', 'wp_gun'], ['棍', 'wp_gun'],
       ['枪', 'wp_qiang'], ['刀', 'wp_dao'], ['剑', 'wp_jian'], ['鞭', 'wp_bian'], ['腿', 'cl_fly'], ['脚', 'cl_fly'],
@@ -534,5 +538,5 @@
     weapons: Array.from(new Set([].concat.apply([], SEED.map((r) => r.weapons))))
   });
 
-  return { VERSION, ACT, SEED, byKey, forStyle, forWeapon, forVariant, VARIANT_MAP, matchByName, describe, brief, stats, stepCount, totalSec };
+  return { VERSION, ACT, SEED, byKey, forStyle, forWeapon, forVariant, VARIANT_MAP, matchByName, describe, brief, stats, stepCount, totalSec, schedule, catalog:C };
 });

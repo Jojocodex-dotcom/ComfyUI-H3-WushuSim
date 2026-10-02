@@ -37,12 +37,32 @@ PKG = os.path.dirname(HERE)
 DEST = os.path.join(PKG, "wushu_sim", "js")
 
 FILES = [
-    "sim3d/moves.js", "sim3d/engine.js", "sim3d/pipeline.js", "sim3d/combat-logic.js", "sim3d/rig.js", "sim3d/cli.js",
-    "sim3d/routines.js", "sim3d/action-system.js", "sim3d/choreography.js", "sim3d/ai-rehearsal.js", "sim3d/diag.js", "core/combat-contract.js", "h3lint.js", "h3tools.js",
+    "core/combat-contract.js",
+    "drama/engine.js",
+    "drama/h3-prompts.js",
+    "drama/h3-validate.js",
+    "drama/one-line.js",
+    "drama/templates/axes.js",
+    "drama/templates/library.js",
+    "h3lint.js",
+    "h3tools.js",
     "ltx2/step2.js",
-    "templates/axes.js", "templates/corpus-data.js", "templates/corpus.js", "templates/library.js",
-    "drama/templates/axes.js", "drama/templates/library.js",
-    "drama/engine.js", "drama/h3-prompts.js", "drama/h3-validate.js", "drama/one-line.js",
+    "sim3d/action-system.js",
+    "sim3d/ai-rehearsal.js",
+    "sim3d/choreography.js",
+    "sim3d/cli.js",
+    "sim3d/combat-logic.js",
+    "sim3d/diag.js",
+    "sim3d/engine.js",
+    "sim3d/moves.js",
+    "sim3d/pipeline.js",
+    "sim3d/rig.js",
+    "sim3d/routines.js",
+    "sim3d/skill-catalog.js",
+    "templates/axes.js",
+    "templates/corpus-data.js",
+    "templates/corpus.js",
+    "templates/library.js",
 ]
 
 DEFAULT_SRC = [

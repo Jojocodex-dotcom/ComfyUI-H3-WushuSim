@@ -809,7 +809,7 @@
   //   只逐条保留"故事骨架"：出招/命中/法术起手·脱手·命中/护体/建筑碎裂/神通/天地异象/蓄力改招/KO；
   //   其余（气劲、灵光、余波、地面留痕、掩体裂纹、落地、起跳、闪避、冲刺、分身落空、震荡、残影…）一律并进计数。
   const SLIM_KEEP = { attack:1, hit:1, block:1, clash:1, guardbreak:1, spell_cast:1, spell_release:1, spell_hit:1,
-    spell_guard:1, spell_absorbed:1, ward_broken:1, prop_broken:1, trait:1, phenomenon:1, cast_cancel:1,
+    cast_recovery:1,cast_recovery_end:1,spell_guard:1, spell_absorbed:1, ward_broken:1, prop_broken:1, trait:1, phenomenon:1, cast_cancel:1,
     ko:1, ring_out:1, cornered:1, slam:1 };
   // 装饰类 + 破坏类明细：都只留计数（碎块/震荡/裂纹一次次列出来，模型读起来全是重复数字）
   const SLIM_DROP = { afterimage:1, cast_move:1, hover_move:1, footwork:1, dash_end:1, filler:1, whiff:1, unstick:1, hover_end:1,
@@ -841,7 +841,7 @@
       // 招式/法术类：只留「谁、什么招、什么时候、结果如何」（坐标只在建筑碎裂与 KO 上保留）
       if (t === 'attack' || t === 'hit' || t === 'spell_cast' || t === 'spell_release' || t === 'spell_hit') {
         const keep2 = ['t', 'who', 'tech', 'damage', 'dmg', 'hp', 'stun', 'kb', 'power', 'heavy', 'finisher',
-          'chain', 'range', 'dist', 'spd', 'chargeT', 'radius', 'link', 'height', 'ko'];
+          'formKey','recoverT','readyAt','targeting','vfx','chain', 'range', 'dist', 'spd', 'chargeT', 'radius', 'link', 'height', 'ko'];
         const o1 = { t: rnd(e.t), type: t };
         // 零值/假值字段直接省略（false 与 0 本来就是"没有"的意思：没硬直、没击退、在地面、没衔接…），
         //   只保留 damage/hp 的 0（那是有意义的读数：这一下没掉血）。
@@ -1015,8 +1015,8 @@
     //   预算是**上传字数**的硬指标，而 p.slim 自述块（mode/savedPct/chars/budget/droppedEvents）也要上传，
     //   所以比较时把它一起算进去（否则核算刚好压线、实际却超了几百字）。
     //   口径：证据 ≤1.17 万 + 分镜文本 ≤0.8 万 ＝ 上传硬指标 2 万以内（两半都压线时也不许超）。
-    const BUDGET = (opts && opts.budget) || 11700;
-    const RESERVE = 560;                       // p.slim 自述块 + 外层 JSON 包裹的开销
+    const BUDGET = (opts && opts.budget) || 10500;
+    const RESERVE = 1000;                       // p.slim 自述块 + 外层 JSON 包裹的开销
     const sizeOf = () => JSON.stringify(p).length + RESERVE;
     const budgetDrop = [];
     // ① 先丢"提示词里已经给过一遍"的说明段（它们是提示，不是证据）。
@@ -1443,7 +1443,7 @@
    * 分段计划（官方：单次生成 4–15 秒）——整场按节拍安全点切成若干 ≤15 秒的段；
    *   每段＝一次生成、**段内一镜到底**（只用运镜，段内不再切镜；官方 §4.2「能运镜就别切」）。
    */
-  function clipPlan(r, cfg) {
+  function rawClipPlan(r, cfg) {
     const durSim = +r.duration || 0;
     if (!(durSim > 0.5)) return [{ n: 1, k0: 0, k1: +durSim.toFixed(2), sec: +durSim.toFixed(2), oneTake: true }];
     // 用户/页面手动指定镜数时优先照办（只要每段都落在官方 4–15 秒区间里）：
@@ -1585,6 +1585,44 @@
    *   · 「镜头艺术」组合：一整套相位序列，按各相位占比分配到各镜（一镜到底时串成一句话）；
    *   · 没选：active=false，调用方继续用 CAM_LADDER。
    */
+  // Camera cuts and generation batches are different: a repeated view stays one take.
+  function clipPlan(r, cfg) {
+    const plan = cameraPlan(cfg), raw = rawClipPlan(r, cfg);
+    const out = [];
+    raw.forEach((seg, i) => {
+      const view = plan.active ? plan.zh(i, raw.length) : 'auto-' + i;
+      const prev = out[out.length - 1];
+      if (prev && prev.view === view && seg.k1 - prev.k0 <= H3_LIMITS.maxSeconds) {
+        prev.k1 = seg.k1; prev.sec = +(prev.k1 - prev.k0).toFixed(2);
+      } else out.push(Object.assign({}, seg, { view }));
+    });
+    return out.map((seg, i) => {
+      const same = i > 0 && out[i - 1].view === seg.view;
+      const boundary = frameAt(r, seg.k0);
+      return Object.assign({}, seg, { n: i + 1, transition: i === 0 ? 'opening' : same ? 'continuous' : 'cut',
+        cameraAngle: plan.active ? null : [35, 75, 115, 75][i % 4], axisSide: 'same',
+        startState: boundary ? JSON.parse(JSON.stringify(boundary)) : null,
+        endState: frameAt(r, seg.k1) ? JSON.parse(JSON.stringify(frameAt(r, seg.k1))) : null });
+    });
+  }
+  function cameraContinuity(seg, english) {
+    if (!seg) return '';
+    const state = seg.startState;
+    const coords = state && state.A && state.B ? ['A', 'B'].map(id => {
+      const p = state[id];
+      return id + ' world=(' + [p.x, p.y, p.z || 0].map(x => (+x).toFixed(2)).join(',')
+        + '), facing=' + (+p.face || 0).toFixed(3) + ', state=' + (p.st || '') + ', phase=' + (p.ph || '');
+    }).join('; ') : '';
+    if (english) return (seg.transition === 'continuous'
+      ? 'Continue the same unbroken take; use the previous output end frame as reference, no cut or reset. '
+      : seg.transition === 'cut' ? 'Cut on the ongoing action to a viewpoint at least 30 degrees different, on the same side of the fight axis; preserve screen direction. ' : 'Establish the fight axis. ')
+      + (seg.cameraAngle == null ? '' : 'Camera azimuth relative to the fight axis: ' + seg.cameraAngle + ' degrees. ')
+      + 'Inherit exact world positions, facing, action phase, velocity and projectile state at the shared boundary. ' + coords;
+    return (seg.transition === 'continuous' ? '接续同一长镜头，以上段生成末帧作参考，不切镜、不重置。'
+      : seg.transition === 'cut' ? '在持续动作上匹配切镜，新视角至少变化30度，机位保持交手轴线同侧，保持人物运动方向。' : '建立交手轴线。')
+      + (seg.cameraAngle == null ? '' : '机位相对交手轴线方位角' + seg.cameraAngle + '度。')
+      + '共享边界严格继承世界坐标、朝向、动作阶段、速度及在途技能；不重新摆位。' + coords;
+  }
   function cameraPlan(cfg) {
     const src = (cfg && cfg.source) || cfg || {};
     const pick = (k) => (src[k] != null ? src[k] : (cfg ? cfg[k] : null));
@@ -1969,9 +2007,9 @@
   }
   function frameAt(r,t){
     const f=(r&&r.frames)||[]; if(f.length<2) return f[0]||null;
-    const dt=f[1].t-f[0].t; if(!(dt>0)) return f[0];
-    const i=Math.max(0,Math.min(f.length-1,Math.round(t/dt)));
-    return f[i];
+    let lo=0, hi=f.length-1;
+    while(lo<hi){ const mid=Math.floor((lo+hi)/2); if(f[mid].t<t) lo=mid+1; else hi=mid; }
+    return lo>0 && Math.abs(f[lo-1].t-t)<Math.abs(f[lo].t-t) ? f[lo-1] : f[lo];
   }
   // 接镜状态：左右 + 间距 + 高度 + 姿态 + 兵器（全部来自内核真实帧，不编）
   function continuity(r,cfg,t,english){
@@ -2305,7 +2343,7 @@
     const bounds = [0].concat(cuts).concat([durSim]);
     return bounds.slice(0, -1).map((k0, i) => {
       const k1 = bounds[i + 1];
-      const f0 = frameAt(r, k0), f1 = frameAt(r, Math.max(k0, k1 - 1 / 60));
+      const f0 = frameAt(r, k0), f1 = frameAt(r, k1);
       const carry = tl.carryAt(Math.max(k0, k1 - 0.05));
       const nextEnd = i + 1 < bounds.length - 1 ? null : null;
       const inCarry = tl.carryAt(Math.min(k1 + 1 / 60, durSim));
@@ -2680,7 +2718,7 @@
     const intro = (n>1) ? (english
       ? ('ONE CONTINUOUS FIGHT on a single timeline: the cuts below are camera-angle changes only — time never stops and no action ever restarts. The first frame of each shot is the very next moment after the previous shot\'s last frame; carry momentum, stance and any unfinished swing straight through the cut. '
         + 'Generated in ' + n + ' passes (' + CLIPS.map(function(c2){return c2.sec.toFixed(1);}).join('s + ') + 's), each pass within the official 4-15 second range and each an unbroken take. Feed the LAST frame of one pass as the first-frame reference of the next one (see [Shot 1] alignment line).')
-      : ('这是一条连续时间线：下面的切镜只是换机位——时间不停、动作不重启。每一镜的第一帧就是上一镜最后一帧的下一秒；惯性、架势、没收完的那一招必须原样带过切点，不许在新镜重新起势或重新站位。'
+      : ('这是一条连续时间线：下面的切镜只是换机位——时间不停、动作不重启。相邻片段共享同一边界时刻与角色状态；惯性、架势、没收完的那一招必须原样带过切点，不许在新镜重新起势或重新站位。'
         + '本场按官方口径分 ' + n + ' 段生成（' + CLIPS.map(function(c2){return c2.sec.toFixed(1);}).join(' 秒 + ') + ' 秒，每段都在单次生成 4–15 秒区间内），**段内一镜到底**；跨段时把上一段的末帧作为下一段的首帧参考图，并在每段第一行写官方对齐句（页面上有「跨片段接续包」可直接复制）。')) : '';
     for(let i=0;i<n;i++){
       const lineStart=lines.length;
@@ -2751,7 +2789,7 @@
         : CAM_LADDER[Math.min(i,CAM_LADDER.length-1)]);
       const camZh=CAMP.active ? CAMP.zh(i,n) : ((n===1) ? ('一镜到底、不切镜：' + CAM_LADDER_ZH[0])
         : CAM_LADDER_ZH[Math.min(i,CAM_LADDER_ZH.length-1)]);
-      const cam=(english?camEn:camZh);
+      const cam=(english?camEn:camZh) + ' ' + cameraContinuity(CLIPS[i], english);
       const camTagZh=CAMP.active ? CAMP.tagZh(i,n) : (n===1 ? CAM_TAG_ZH[0] : CAM_TAG_ZH[Math.min(i, CAM_TAG_ZH.length-1)]);
       const camTagEn=CAMP.active ? CAMP.tagEn(i,n) : (n===1 ? CAM_TAG_EN[0] : CAM_TAG_EN[Math.min(i, CAM_TAG_EN.length-1)]);
       // 官方「逐秒指令」（Per-Second Directives）：把本镜按整秒切开，每秒覆盖
@@ -2863,6 +2901,7 @@
       //   后面再补一句中文，保证中文作者一眼能读。
       const head = (i===0)
         ? '[Shot 1]'
+        : CLIPS[i].transition === 'continuous' ? ('[Shot ' + (i+1) + '] ' + h3Stamp(a) + (english ? ' continue the same take' : ' 接续同一长镜头'))
         : ('[Shot ' + (i+1) + '] ' + h3Stamp(a) + ' the camera cuts to a new viewpoint'
            + (english ? '' : '（镜头切到新机位）'));
       const hook = hookOf(ev, i, _seenTypes);
@@ -3071,7 +3110,7 @@
     //   用户口径原文：「15 秒拆成三镜换机位（时间不断），全片大约 14 拍」。
     const segs = (function () {
       try {
-        const auto = String((cfg && cfg.shotPlan) || 'auto');
+        const auto = cameraPlan(cfg).active ? 'continuous' : String((cfg && cfg.shotPlan) || 'auto');
         if (auto === 'auto' && dur >= 12.5) {
           const three = clipPlan(r, Object.assign({}, cfg, { shotPlan: '3' }));
           if (three && three.length >= 3) return three;
@@ -3195,7 +3234,7 @@
       const k0 = +seg.k0, k1 = +seg.k1;
       const chosen = shotsPicked[i];
       const row0 = (() => { try { return stageRow(r, k0); } catch (e) { return null; } })();
-      const rowEnd = (() => { try { return stageRow(r, Math.max(k0, k1 - 1 / 60)); } catch (e) { return null; } })();
+      const rowEnd = (() => { try { return stageRow(r, k1); } catch (e) { return null; } })();
       const camZh = CAMP.active ? CAMP.zh(i, segs.length) : ((i === 0) ? ('一镜到底、不切镜：' + CAM_LADDER_ZH[0]) : CAM_LADDER_ZH[Math.min(i, CAM_LADDER_ZH.length - 1)]);
       const camEn = CAMP.active ? CAMP.en(i, segs.length) : ((i === 0) ? CAM_ONESHOT_PROSE : CAM_LADDER[Math.min(i, CAM_LADDER.length - 1)]);
       const beats = chosen.map((e) => (english ? ('At ' + e.t.toFixed(2) + 's ') : ('第' + e.t.toFixed(2) + '秒 ')) + textOf(e) + (english ? '.' : '。'));
@@ -3203,14 +3242,14 @@
         const head = (i === 0)
           ? ('[Shot 1] ' + camEn + ' Opening frame: ' + posShort(row0, true) + '. ')
           : ('[Shot ' + (i + 1) + '] Continuing from the last frame of the previous shot (same clock, no restart), t=' + k0.toFixed(2) + 's: ' + posShort(row0, true) + '. ' + camEn + ' ');
-        lines.push(head + beats.join(' ')
+        lines.push(head + cameraContinuity(seg, true) + ' ' + beats.join(' ')
           + ' Closing frame: ' + posShort(rowEnd, true) + '. Same location, same light, same faces, same costumes and weapons on both fighters, throughout.');
       } else {
         const head = (i === 0)
           ? ('[Shot 1] ' + camZh + '　起幅：' + posShort(row0, false) + '。')
           : ('[Shot ' + (i + 1) + '] 承接上一镜末帧（同一秒表继续）：t=' + k0.toFixed(2) + 's　' + posShort(row0, false)
              + '。先把上一镜的收势走完，再进下一拍，不重新站桩。' + camZh + '　');
-        lines.push(head + beats.join('')
+        lines.push(head + cameraContinuity(seg, false) + beats.join('')
           + '落幅：' + posShort(rowEnd, false) + '。同一场、同一光线、同一张脸、同一套服装兵器，全程不换人。');
       }
     });
@@ -3219,7 +3258,7 @@
       ? ('Continuity: one unbroken clock — every cut is only a camera change (the action carries across the cut). '
          + 'Total ' + beatsTotal + ' beats in ' + segs.length + ' shots; at most three full exchanges per shot. '
          + (chain && chain.run1 ? ((r[chain.P1] || {}).name || chain.P1) + ' presses first, then the counter and the turn, and the last hit sends the loser along the strike line. ' : ''))
-      : ('一条连续时间线：下面每次切镜只是换机位——时间不停、动作不重启，每一镜的第一帧就是上一镜最后一帧的下一秒。'
+      : ('一条连续时间线：下面每次切镜只是换机位——时间不停、动作不重启，相邻片段共享同一边界时刻与角色状态。'
          + '全片共 ' + beatsTotal + ' 拍、' + segs.length + ' 镜，单镜最多两记完整招＋一次防守结果，中间不写连点。'
          + (chain && chain.run1 ? ((r[chain.P1] || {}).name || '先手') + '先压制数招，被反打后转入反压制，最后一击沿作用线把人打出去。'
          : '') + '特效只升一档一次，其余写实接触反馈（火星、碎石、衣破、踉跄）。');
@@ -3237,6 +3276,6 @@
   return {rules,compile,packet,evidenceText,slimPacket,tempoStats,destructionStats,describe,shots,shotBlocks,shotCount,timelineText,AFTER_WINDOW,
     denseShots,denseBudget,denseChain,
     stagingRows,stageRow,stageLine,STAGE_LEGEND,cutPoints,cutScore,handoff,straddlingAttack,shotTimeline,shotSegments,
-    clipPlan,landmarkCard,landmarkLine,persecDirectives,refKit,H3_LIMITS,CAM_LADDER,CAM_LADDER_ZH,CAM_TAG_ZH,h3Stamp,cameraPlan,camTagOf,
+    clipPlan,cameraContinuity,landmarkCard,landmarkLine,persecDirectives,refKit,H3_LIMITS,CAM_LADDER,CAM_LADDER_ZH,CAM_TAG_ZH,h3Stamp,cameraPlan,camTagOf,
     fxProfile,FX_TIERS,FX_STYLES,qiProfile,QI_BANDS,heroBeat,heroLine,screenLine,screenLadder,HERO_FOCUS};
 });

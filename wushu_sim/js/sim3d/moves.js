@@ -642,6 +642,8 @@ function _index(mv) {
   return mv;
 }
 
+const CATALOG=typeof module==='object'&&module.exports?require('./skill-catalog'):globalThis.H3_SKILL_CATALOG;
+if(CATALOG)CATALOG.forms.forEach(f=>{if(SEED.some(m=>m.zh===f.zh))return;const last=f.steps[f.steps.length-1];SEED.push({key:f.key,zh:f.zh,en:f.en,category:f.category,weapons:f.weapons,tiers:f.tiers,prep:f.prep||f.steps[0].note,act:f.act||f.steps.map(s=>s.note).join(' → '),effect:f.fx?CATALOG.fxDescription(f,'hit'):f.steps.map(s=>s.note).join('；')+'；衣袖掠过留下短促运动残影，接触伴随衣料摩擦与沉闷撞击声',follow:last.note,timing:f.timing||{charge:[.14,.24],active:[.08,.14],recover:[.22,.4]},range:f.range,arc:f.targeting?.angle||60,band:["low","mid","high"].includes(f.band)?f.band:"mid",tags:[f.family,'具名套路'],routine:f.key,targeting:f.targeting,source:'seed'});});
 SEED.forEach(_index);
 
 // 内置招式：把原本文案的 effect 现场组装成五段式
