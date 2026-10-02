@@ -1,35 +1,59 @@
 {
-  "synced_at": "2026-10-02T08:11:16+08:00",
-  "source": "H:\\wushulong\\H3武斗模拟器-v9.12",
-  "versions": "{\"engine\": \"sim3d-0.6\", \"combatLogic\": \"fight-logic-0.2\", \"ltx2\": \"ltx2-step2-0.2\"}",
+  "synced_at": "2026-10-02T08:16:45+08:00",
+  "source": "H:\\wushulong\\H3武斗工作室-v10\\_from-downloads\\v12-source\\h3",
+  "versions": "{\"engine\": \"sim3d-2.0\", \"combatLogic\": \"fight-logic-0.2\", \"ltx2\": \"ltx2-step2-0.2\"}",
   "files": {
     "sim3d/moves.js": {
       "sha256": "d850231e981b972aae936551e4f0f2c88ae24492238ab4bfa1ffb2ea349d3fd6",
       "bytes": 63663
     },
     "sim3d/engine.js": {
-      "sha256": "af32a6dff06aed6f99dc2140ce8167dcf1324095d173f7857ec1b9dbe807ccc4",
-      "bytes": 269169
+      "sha256": "b79626e28428c857f2ebe746bb3e9bdb1a6549896060f57b7d65e4ae95c60a98",
+      "bytes": 273777
     },
     "sim3d/pipeline.js": {
-      "sha256": "2a1dafbc85c3ead8372f14f33b30970aed1e0fdb77ec976723277a2242a4d14c",
-      "bytes": 281045
+      "sha256": "c30add02cc73e1db38df4879ada2f8b80e0e9e476d053bf0af45cbf0b8882233",
+      "bytes": 283643
     },
     "sim3d/combat-logic.js": {
-      "sha256": "19b51251463a2972d2d7a391c6e3b512b62c5a4680c417d0df220907590bab10",
-      "bytes": 51818
+      "sha256": "fa7a91506cffedc9e5ea460fbf0c50a32839c74b50a0ca8678f07566629ba064",
+      "bytes": 51820
     },
     "sim3d/rig.js": {
-      "sha256": "cefd635c99fcdaac0359e7cc35ef2caa4c92b6f22997bc378db44c625cd9d7bb",
-      "bytes": 31550
+      "sha256": "2bb3b5d281708c5816e4ffd2fa07c669ed5a6109f62a6175828073b4b54ef0e1",
+      "bytes": 32580
     },
     "sim3d/cli.js": {
       "sha256": "c54053798f8a5bd6005137a749c3cbdc76106213e2aeec6a1a2a3ccccdd7876f",
       "bytes": 14439
     },
+    "sim3d/routines.js": {
+      "sha256": "2576751bf4afd477acafbac517bb0b1c9bfc43e3fe492bdea87928289afe0094",
+      "bytes": 44176
+    },
+    "sim3d/action-system.js": {
+      "sha256": "11c41175759197bbc8e5b5dc82eaf2b1fcd3a296656de899f89312fa389f29be",
+      "bytes": 3318
+    },
+    "sim3d/choreography.js": {
+      "sha256": "6232d25235d791a222349592fee1f2e2533b6763c08c1955b220da9a29d8c72e",
+      "bytes": 919
+    },
+    "sim3d/ai-rehearsal.js": {
+      "sha256": "875c2e7e218f88e529a8a9f0db2dd025fec7a4dd9026eeccb224c2018b461484",
+      "bytes": 3093
+    },
+    "sim3d/diag.js": {
+      "sha256": "fc3265cd9bd65cb63c0bf39d09ca369c53b870bdb64a5d70b503b92174bebe31",
+      "bytes": 1543
+    },
+    "core/combat-contract.js": {
+      "sha256": "18b9aa8d1975df768399f4867165f53dd9a9f073e78493a8f27aad6f137d2d3f",
+      "bytes": 1485
+    },
     "h3lint.js": {
-      "sha256": "a6e31c0bf73b92081efebcb7c6f7a7bf6e683886b38f4ab7703014d2d23fb113",
-      "bytes": 111851
+      "sha256": "c7ddefc38e051e598921a67aba2fec2c6695073d026c8fbb478f9881db69a000",
+      "bytes": 112275
     },
     "h3tools.js": {
       "sha256": "ff0cff05f348e141991b1cf62c78a3abb938f50165a24f3926905389234f5cca",

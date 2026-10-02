@@ -320,7 +320,7 @@
           if (NON_ACTION_JUMP.test(tJump.slice(i, i + w.length + 2))) continue;
           if (NON_ACTION_HIT.test(tJump.slice(Math.max(0, i - 2), i + w.length + 2))) continue;
           if (NON_ACTION_NOUN.test(tJump.slice(Math.max(0, i - 6), i + w.length + 4))) continue;
-          const win = tJump.slice(Math.max(0, i - 48), i + w.length + 48);
+          const win = tJump.slice(Math.max(0, i - 160), i + w.length + 160);
           if (!strict) continue;                                   // 宽松档不逐词查（骨架是动作菜单）
           if (!PURPOSE_MARKERS.some(pp => win.indexOf(pp) >= 0)) purposeless.push(cls + ":" + w);
         }

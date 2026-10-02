@@ -506,7 +506,8 @@
 
     // ── 5. 主语与双人同框 ─────────────────────────────────────────────
     if (names.length) {
-      const shotsText = shotsCount(t) ? t.split(/\[Shot\s*\d+\]/i).slice(1) : [t];
+      const bodyOnly = (t.match(/(?:integrated_multimodal_description|detailed_description):([\s\S]*?)(?=\n\s*(?:overall_soundscape|non_diegetic_music):|$)/i)||[null,t])[1];
+      const shotsText = shotsCount(bodyOnly) ? bodyOnly.split(/\[Shot\s*\d+\]/i).slice(1) : [bodyOnly];
       shotsText.forEach((seg, i) => {
         if (!seg.trim()) return;
         const has = names.filter(n => seg.includes(n)).length;
@@ -598,7 +599,8 @@
 
     // ── 11. 打斗连贯性（核心打斗逻辑：不许发呆、要有因果链与反击）────────
     if (FIGHT_LOGIC && FIGHT_LOGIC.checkPrompt) {
-      const fl = FIGHT_LOGIC.checkPrompt(t, { mode: mode === "design" ? "design" : "final" });
+      const fightBody = (t.match(/(?:integrated_multimodal_description|detailed_description):([\s\S]*?)(?=\n\s*(?:overall_soundscape|non_diegetic_music):|$)/i)||[null,t])[1];
+      const fl = FIGHT_LOGIC.checkPrompt(fightBody, { mode: mode === "design" ? "design" : "final" });
       fl.issues.forEach(it => add(it.level, "fight-" + it.code, it.msg, it.hint));
       if (mode === "final" && fl.stats.shots >= 2 && fl.stats.filler === 0) {
         add("error", "fight-no-filler", "② 打斗没有一次脚步或换架（间隙动作），空档会被渲染成静止", "把「垫步逼近／绕半步改角度／换架／拖步蓄势」写进每个空档。");
@@ -1050,7 +1052,7 @@
       "h3-h2-first", "h3-h2-order", "h3-h5-limit", "h3-h5-unref", "h3-h8-negation", "h3-h9-vo", "h3-h12-pair", "h3-h12-dangle"] },
     { key: "motion", zh: "运动与节奏", ids: ["start-slow", "beat-density", "slowmo", "empty-word", "effect-unanchored", "tier-inner", "tier-inner-shape", "tier-cataclysm", "fx-flat", "fx-detail", "fx-spectacle", "fx-xianxia", "fx-over", "fx-scale", "fx-scar", "fx-aftermath", "passive-fighter",
       "hit-feedback", "hit-feedback-scar", "spell-aim", "jump-reason", "fx-count", "fx-charge", "fx-charge-time",
-      "tempo-slow", "tempo-dash", "tempo-combo", "tempo-chase", "abstract-fx", "hero-head-only",
+      "tempo-slow", "tempo-dash", "tempo-combo", "tempo-chase", "abstract-fx", "hero-head-only", "hero-shot-missing", "fx-fullscreen-missing",
       "env-destruction", "env-scale",
       "h3-density", "h3-density-shot", "h3-fx-once", "h3-filler-beat",
       "form-missing", "form-few", "form-vanish", "form-one-note", "form-color", "form-over"] },

@@ -51,6 +51,7 @@
       plantedL:foot("plantedL"),plantedR:foot("plantedR"),
       x: n("x"), y: n("y"), z: n("z"), face: lerpAngle(f0.face, f1.face, t),
       ba: lerpAngle(ba0, ba1, t),
+      rise:n("rise"), roll:n("roll"), rollP:f0.action===f1.action ? n("rollP") : chosen.rollP||0, rollDir:chosen.rollDir||0, action:chosen.action, actionPhase:chosen.actionPhase,
       ft:n("ft"), hp: n("hp"), gd: n("gd"), sa: n("sa"), t: n("t"), tp: n("tp"), gait: lerpAngle(f0.gait || 0, f1.gait || 0, t),
       st: (t < 0.5 ? f0.st : f1.st), ph: (t < 0.5 ? f0.ph : f1.ph),
       tech: (t < 0.5 ? f0.tech : f1.tech) || f0.tech || "", post: (t < 0.5 ? f0.post : f1.post)
@@ -413,6 +414,15 @@
       const rotate=p=>{const dx=p.x-root.x,dy=p.y-root.y,h=p.z-root.z,forward=dx*cos+dy*sin,side=-dx*sin+dy*cos;
         return {x:root.x+(forward*c+h*sn)*cos-side*sin,y:root.y+(forward*c+h*sn)*sin+side*cos,z:Math.max(baseZ+0.04,root.z-forward*sn+h*c)};};
       for(const k of ["chest","neck","head","hipL","hipR","shoulderL","shoulderR","elbowL","elbowR","handL","handR","kneeL","kneeR","footL","footR"])output[k]=rotate(output[k]);
+      output.blade={a:output.handR,b:rotate(tip)};
+    }
+    if(f.action === 'roll' && f.rollP > 0 && f.rollP < 1){
+      const p=clamp(f.rollP,0,1), blend=Math.sin(Math.PI*p), ang=2*Math.PI*p;
+      const dir=f.rollDir==null?f.face:f.rollDir, c=Math.cos(ang), sn=Math.sin(ang), dc=Math.cos(dir), ds=Math.sin(dir);
+      const pivot={x:root.x,y:root.y,z:baseZ+lerp(root.z-baseZ,.48,blend)};
+      const rotate=q=>{const x=q.x-root.x,y=q.y-root.y,z=(q.z-root.z)*(1-.58*blend),forward=(x*dc+y*ds)*(1-.3*blend),side=-x*ds+y*dc;
+        return {x:pivot.x+(forward*c+z*sn)*dc-side*ds,y:pivot.y+(forward*c+z*sn)*ds+side*dc,z:Math.max(baseZ+.04,pivot.z-forward*sn+z*c)};};
+      for(const k of ['root','chest','neck','head','hipL','hipR','shoulderL','shoulderR','elbowL','elbowR','handL','handR','kneeL','kneeR','footL','footR'])output[k]=rotate(output[k]);
       output.blade={a:output.handR,b:rotate(tip)};
     }
     return output;

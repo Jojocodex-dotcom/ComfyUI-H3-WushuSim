@@ -38,7 +38,7 @@ DEST = os.path.join(PKG, "wushu_sim", "js")
 
 FILES = [
     "sim3d/moves.js", "sim3d/engine.js", "sim3d/pipeline.js", "sim3d/combat-logic.js", "sim3d/rig.js", "sim3d/cli.js",
-    "h3lint.js", "h3tools.js",
+    "sim3d/routines.js", "sim3d/action-system.js", "sim3d/choreography.js", "sim3d/ai-rehearsal.js", "sim3d/diag.js", "core/combat-contract.js", "h3lint.js", "h3tools.js",
     "ltx2/step2.js",
     "templates/axes.js", "templates/corpus-data.js", "templates/corpus.js", "templates/library.js",
     "drama/templates/axes.js", "drama/templates/library.js",

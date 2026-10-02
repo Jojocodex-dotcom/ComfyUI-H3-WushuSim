@@ -1160,15 +1160,19 @@
     const fxEn = (s) => (s == null ? '' : (EN_FX[s] || s));
     // 击飞 / 击倒 / 起身（2026-09-29 加）：放在 describe() **最前面**，避免被后面的分支结构吃掉
     //   （第一版插在 landing 旁边没生效：实测 P.describe() 直接返回 "knockdown" 这种英文 token）。
+    if(e.type==='roll_start')return english ? b+' lowers the center, tucks the weapon and rolls away; startup, ground roll and recovery are continuous' : b+'压低重心、收拢兵器向侧方翻滚，依次完成下沉、肩背滚动与撑地回架';
+    if(e.type==='roll_end')return english ? b+(e.interrupted?' has the roll interrupted':' completes the roll and regains the stance') : b+(e.interrupted?'翻滚被打断':'完成翻滚，撑地回到架势');
+    if(e.type==='down_settled')return english ? b+' settles on the ground and cannot attack yet' : b+'倒势落定，保持倒地阶段，尚不能出招';
+    if(e.type==='getup_end')return english ? b+' finishes standing up and regains control' : b+'完成起身，恢复控制与架势';
     if (e.type === 'launch') return english
-      ? (b + ' is knocked off the ground by ' + techEn(e) + ' (launch speed ' + num(e.vz) + ' m/s, apex about ' + num(e.apex) + ' m, ' + num(e.airT) + ' s airborne - helpless until landing; the launch starts on the very same frame as the hit, never after a pause)')
-      : (a + '被「' + (e.tech || '这一下') + '」打得离地（抛起 ' + num(e.vz) + ' 米每秒、最高约 ' + num(e.apex) + ' 米、滞空 ' + num(e.airT) + ' 秒' + (e.power === 'strong' ? '，对手力量压过自己' : (e.power === 'weak' ? '，对手力量不及' : '，力量相当')) + '——**离地就发生在命中的同一拍里**，是这一下的直接延续，不是站定/停顿之后再起飞；这几秒他在空中是失控的，别写成站着挨打）');
+      ? (b + ' is knocked off the ground by ' + techEn(e) + ' (launch speed ' + num(e.vz) + ' m/s, apex about ' + num(e.apex) + ' m, ' + num(e.airT) + ' s airborne - control returns only after air recovery; the launch starts on the very same frame as the hit, never after a pause)')
+      : (b + '被「' + (e.tech || '这一下') + '」打得离地（抛起 ' + num(e.vz) + ' 米每秒、最高约 ' + num(e.apex) + ' 米、滞空 ' + num(e.airT) + ' 秒' + (e.power === 'strong' ? '，对手力量压过自己' : (e.power === 'weak' ? '，对手力量不及' : '，力量相当')) + '——**离地就发生在命中的同一拍里**，是这一下的直接延续，不是站定/停顿之后再起飞；先进入凌空受击，受身恢复或落地后才能恢复控制）');
     if (e.type === 'knockdown') return english
       ? (b + ' is knocked down' + (e.how === '破势' ? ' as the guard breaks' : (e.how === '连招收尾' ? ' at the end of the combo' : (e.impact ? ' by the landing impact' : ''))) + ' and stays on the ground for ' + num(e.downT || 1.6) + ' s, then needs 0.6 s to push back up')
-      : (a + '被打倒' + (e.how ? '（' + e.how + '）' : (e.impact ? '（落点冲击 ' + num(e.impact) + '）' : '')) + '，就地躺倒（躺 ' + num(e.downT || 1.6) + ' 秒，之后还要 0.6 秒撑地爬起——这段时间不许切镜、不许让他立刻站直，胜者收势等待）');
+      : (b + '被打倒' + (e.how ? '（' + e.how + '）' : (e.impact ? '（落点冲击 ' + num(e.impact) + '）' : '')) + '，就地躺倒（躺 ' + num(e.downT || 1.6) + ' 秒，之后还要 0.6 秒撑地爬起——这段时间不许切镜、不许让他立刻站直，对手可换位准备后续攻防，击倒并不代表胜负已定）');
     if (e.type === 'getup') return english
       ? (b + ' pushes back up to the feet (0.6 s rise, not an instant stand)')
-      : (a + '撑地爬起（起身过程 ' + num(e.riseT || 0.6) + ' 秒，站起身才算这一拍结束）');
+      : (b + '撑地爬起（起身过程 ' + num(e.riseT || 0.6) + ' 秒，站起身才算这一拍结束）');
     const fxList = (arr) => (arr || []).map(fxEn).join(', ');
     // 起跳原因（内核 canLeap 带出来的 why）：提示词要写清"为什么跳"，不许无逻辑弹跳
     const LEAP_WHY_ZH={evade:'为躲开来招',attack:'为跃起重击',antiAir:'为迎空拦截',close:'为突进接近',chase:'为追击',reposition:'借墙换位',escape:'为脱离'};
@@ -2517,7 +2521,7 @@
     spell_after:'法术余波', ward_broken:'护体被震碎', ward_hold:'护体硬吃', cast_cancel:'施法被打断', qi_burst:'气劲外放',
     aura:'灵光护体', phenomenon:'天地异象', ground_scar:'地面留痕', obstacle_hit:'掩体被砸', prop_broken:'器物碎裂',
     trait:'神通', hover:'悬空停留', air_stall:'滞空调整', flee:'脱离',
-      launch:'被击飞离地', knockdown:'被击倒', getup:'翻身起身' };   // 2026-09-29：击飞/击倒/起身（内核已真的结算出来）
+      roll_start:'翻滚启动',roll_phase:'翻滚阶段',roll_end:'翻滚结束',down_settled:'倒势落定',getup_end:'起身完成',launch:'被击飞离地', knockdown:'被击倒', getup:'翻身起身' };   // 2026-09-29：击飞/击倒/起身（内核已真的结算出来）
   const evZh = (t, count) => {
     const zh = EV_ZH[t] || EV_ZH[String(t).replace(/^同类动作\((.*)\)$/, '$1')] || String(t).replace(/^同类动作\((.*)\)$/, '$1');
     return zh + '×' + count;
@@ -2991,7 +2995,7 @@
   //     ⑤ 不写逐秒指令表、连击链、锚点卡、破坏统计、时间线记账——那些留在证据 JSON 与第 1 步素材里
   //        （正文里塞这些只占权重，还会把中间几拍挤掉）。
   const DENSE_KIND = { ko: 9, launch: 8, spell_hit: 8, hit: 7, guardbreak: 7, slam: 6, knockdown: 6,
-    clash: 5, block: 5, skill: 5, spell_release: 4, spell_cast: 2, attack: 4, dodge: 3, landing: 2, prop: 2 };
+    clash: 5, block: 5, skill: 5, spell_release: 4, spell_cast: 2, attack: 4, dodge: 3, landing: 2, roll_start: 3, roll_end: 2, getup: 2, getup_end: 2, air_recover: 3, takeoff: 2, hover_move: 2, prop: 2 };
   //   连续光效词：除"升档那一次"之外一律削掉（用户口径：气刃只留一次，或整段降回写实）
   const FX_REPEAT_RE = /(金紫[＋+]?虚空黑|金紫|虚空黑|星辉|灵光|法相|气形|光柱|剑芒|雷弧|电弧|过曝白芯|满屏光彩)/g;
   const REAL_FALLBACK = { zh: ['掌风压得雨丝斜飞', '火星在兵刃上炸开', '碎石与雨点被踩得四散', '衣摆与发丝被劲风带起'],
@@ -3086,7 +3090,7 @@
     const lim = o.lineMax ? Math.min(o.lineMax, 60) : (english ? 96 : 46);
     const evAll = (r.events || []).slice().sort((a, b) => a.t - b.t);
     const kindScore = (e) => DENSE_KIND[e.type] || 0;
-    const OFFENSIVE = (e) => e.type === 'attack' || e.type === 'spell_release' || e.type === 'skill';
+    const OFFENSIVE = (e) => e.type === 'attack' || e.type === 'spell_release' || e.type === 'spell_cast' || e.type === 'skill';
     // 升档只给一次：整片分数最高的那一拍保留光效，其余削成写实词
     let upIdx = -1, upScore = -1;
     evAll.forEach((e, i) => { const s = kindScore(e) + (e.heavy ? 2 : 0) + (e.finisher ? 3 : 0); if (s > upScore) { upScore = s; upIdx = i; } });
@@ -3152,7 +3156,10 @@
       if (!inAny) {
         let si = segs.findIndex((s) => fin.t >= +s.k0 && fin.t < +s.k1);
         if (si < 0) si = segs.length - 1;
-        shotsPicked[si] = shotsPicked[si].concat([fin]).sort((a, b) => a.t - b.t);
+        const arr=shotsPicked[si],category=OFFENSIVE(fin),cap=category?capOff:capReact;
+        if(arr.filter(e=>OFFENSIVE(e)===category).length>=cap){const weakest=arr.filter(e=>OFFENSIVE(e)===category&&!e.finisher).sort((a,b)=>kindScore(a)-kindScore(b))[0];if(weakest)arr.splice(arr.indexOf(weakest),1);}
+        if(arr.length>=capOff+capReact){const weakest=arr.filter(e=>!e.finisher).sort((a,b)=>kindScore(a)-kindScore(b))[0];if(weakest)arr.splice(arr.indexOf(weakest),1);}
+        shotsPicked[si] = arr.concat([fin]).sort((a, b) => a.t - b.t);
       }
     }
     // 「撞墙/撞碎」全片只留一次（用户口径：15 秒里两次 Lv4 级撞墙，模型分不清谁在压）
@@ -3164,6 +3171,24 @@
         if (!isWall || !wallSeen || e.finisher) { if (isWall) wallSeen = true; kept.push(e); }
       }
       if (kept.length) shotsPicked[si] = kept;
+    }
+    // Sparse exchanges can repeat a move legitimately. Fill the requested density
+    // from real, separated events after wall filtering, keeping each shot's caps.
+    const minimum = Math.min(budget, dur >= 12.5 ? 12 : 10);
+    let beatCount = shotsPicked.reduce((sum, arr) => sum + arr.length, 0);
+    for (const e of evAll.slice().sort((a, b) => kindScore(b) - kindScore(a) || a.t - b.t)) {
+      if (beatCount >= minimum) break;
+      if (kindScore(e) < 2) continue;
+      const si = segs.findIndex(seg => e.t >= +seg.k0 && e.t < +seg.k1);
+      if (si < 0) continue;
+      const arr = shotsPicked[si];
+      if (arr.some(x => Math.abs(x.t - e.t) < 0.25)) continue;
+      const offensive = OFFENSIVE(e);
+      if (arr.filter(x => OFFENSIVE(x) === offensive).length >= (offensive ? capOff : capReact)) continue;
+      const wall = /撞[^，。；]{0,6}(墙|壁)|把墙|墙体|撞碎|砸碎/.test(textOf(e));
+      if (wall && wallSeen) continue;
+      if (wall) wallSeen = true;
+      arr.push(e); arr.sort((a, b) => a.t - b.t); beatCount++;
     }
     const lines = [];
     segs.forEach((seg, i) => {

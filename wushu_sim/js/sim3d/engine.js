@@ -18,7 +18,10 @@
 })(typeof globalThis !== "undefined" ? globalThis : this, function () {
   "use strict";
 
-  const VERSION = "sim3d-0.6";
+  const VERSION = "sim3d-2.0";
+  const ACTIONS = typeof module === "object" && module.exports ? require("./action-system.js") : globalThis.H3_ACTIONS;
+  const CONTRACT = typeof module === "object" && module.exports ? require("../core/combat-contract.js") : globalThis.H3_CONTRACT;
+  const CHOREOGRAPHY = typeof module === "object" && module.exports ? require("./choreography.js") : globalThis.H3_CHOREOGRAPHY;
   const DT = 1 / 60;                 // 固定步长
   const CAP_R = 0.34;                // 角色胶囊半径（米）
 
@@ -933,6 +936,14 @@
         _libState.used++;
       }
     }
+    // Validate the selected move after its library timing/range have been applied.
+    // Generic weapon reach alone cannot predict a short elbow or a long thrust.
+    if (!v.air && !v.dive && target && target.hp > 0 && f.z < 0.05 && target.z < 0.05) {
+      const leadT = Math.min(0.35, w);
+      const predicted = Math.hypot(target.x + target.vx*leadT - f.x - f.vx*leadT,
+                                   target.y + target.vy*leadT - f.y - f.vy*leadT);
+      if (predicted > f.reach * (v.reach || 1) + CAP_R * 0.75) return false;
+    }
     const cost = (10 + 8 * v.stam) * (f.wpnKey === "nodachi" ? 1.2 : 1) * (v.air ? 1.45 : 1);
     if (f.sta < cost * 0.5 && !f.style.ruthless) return false;
     f.sta = Math.max(0, f.sta - cost);
@@ -1025,7 +1036,7 @@
     atk.lastContactT = sim.t; def.lastContactT = sim.t;
     // 无敌帧（受身脱出/连段衰减给的短暂保护）：这一下判成"闪开了"，人和招式都照常走完 ——
     //   没有这条，第 4 下的"受身"只是换个动画继续挨打。
-    if ((def.iframes || 0) > 0 && !clashed) {
+    if ((def.iframes || 0) > 0 && !clashed && !def.rules.noDodge) {
       def.stats.dodges++;
       sim._last = { mode: "iframes", tech: v.zh, spell: !!v.spell };
       sim.events.push({ t: +sim.t.toFixed(3), type: "dodge", who: def.id, by: atk.id, x: +def.x.toFixed(3), y: +def.y.toFixed(3),
@@ -1056,7 +1067,7 @@
       const push = 0.5 * v.kb * (atk.prof.power / def.prof.power) * 3;
       def.vx += Math.cos(dirAng) * push / def.prof.push; def.vy += Math.sin(dirAng) * push / def.prof.push;
       def.guard -= base * 0.85 * v.stam;
-      def.state = "block"; def.blockHold = Math.max(def.blockHold, 0.22);
+      if(!["hitstun","stagger","down"].includes(def.state) && !ACTIONS.locked(def))def.state = "block"; def.blockHold = Math.max(def.blockHold, 0.22);
       def.stats.blocks++;   // 只有"防守方"记格挡（进攻方不记）
       sim._last = { mode: "block", tech: v.zh, spell: !!v.spell, guard: def.guard };
       atk.lastOutcome = "block"; def.lastOutcome = "block";
@@ -1183,7 +1194,7 @@
       }
     }
     // 硬直：法术可以自带 v.stun（按威力放大）；肉搏照旧按 v.dmg 分档
-    def.hitstun = (v.stun != null ? v.stun : (v.dmg >= 1.6 ? 0.40 : v.dmg >= 1.05 ? 0.26 : 0.18)) * (1 + (def.prof.tough - 1) * 0.15);
+    def.hitstun = Math.max(def.hitstun || 0, (v.stun != null ? v.stun : (v.dmg >= 1.6 ? 0.40 : v.dmg >= 1.05 ? 0.26 : 0.18)) * (1 + (def.prof.tough - 1) * 0.15));
     // 击倒（2026-09-29）：重手打在**踉跄/崩防/刚落地的失衡状态**上 → 直接躺倒，不必先被抛飞。
     // 击倒（2026-09-29）：三条触发，全部只对**地面、非飞行档**的人生效：
     //   ① 破势：重手打在踉跄/崩防/下蹲失衡上（港片"抓空门一招放倒"）；
@@ -1192,12 +1203,12 @@
     //   ⚠ 触发条件是"或"关系，不能挂在 (v.kb>=1.55) 这个外层门后面（第一版就是这么写的 → 击倒仍只有 0.3 次/场）。
     {
       const _kdOk = !blocked && !clashed && def.hp > 0 && def.state !== "down"
-                    && !def.mob.flight && (def.z || 0) < 0.6;
+                    && !def.mob.flight && (def.z || 0) <= 0.05;
       const _kdHeavy = (v.kb >= 1.45 || v.finisher);
       const _kdBreak = _kdHeavy && (def.state === "stagger" || def.guard <= 18 || (def.post === "crouch" && v.kb >= 1.9));
       const _kdCombo = def.hitsTaken >= 3 && v.kb >= 0.95 && sim.rng() < 0.5;   // 必须是"三连以上"：两连就倒会把第 4 下的"受身脱出"整条机制挤掉（实测受身次数变 0）
       const _kdChase = def.state === "hitstun" && v.kb >= 1.15 && sim.rng() < 0.45;
-      if (_kdOk && (_kdBreak || _kdCombo || _kdChase)) {
+      if (_kdOk && (_kdBreak || _kdCombo || _kdChase) && !def.launched) {
                 // ⚠ 这里只登记"要倒地"：applyHit 后面（def.state = "hitstun" 那行）会把状态覆盖掉，
         //   所以真正的倒地状态放在 applyHit 末尾统一生效（见 wantDown）。
         def.wantDown = true; def.post = "stand"; def.vz = 0;   // ⚠ 不动 z：归零会把半空的人瞬移到地面（3D 单帧跳 0.2m，实测被 test-rig 抓到）
@@ -1228,7 +1239,7 @@
     }
     // 2026-10-01：被连到第 2 下就"想办法出去"（翻滚脱出）——旧版要等到第 4 下才受身，
     //   观众看到的就是"连挨四拳只会站着挨打"。读招越好（等级/老谋深算）越容易提前脱出。
-    if (def.hitsTaken >= 2 && def.state !== "down" && (def.z || 0) < 1.0 && (def.sta || 0) > 18 &&
+    if (def.hitsTaken >= 2 && def.state !== "down" && !def.wantDown && !def.launched && (def.z || 0) < 0.12 && (def.sta || 0) > 18 &&
         !def.rules.noDodge && sim.rng() < 0.26 + 0.34 * ((def.iq && def.iq.read) || 0.5)) {
       def.state = "dodge"; def.roll = 0.5; def._escape = true;
       //   ⚠ 不削减"这一下本身的硬直"（否则法术命中的反馈会被量成 <0.22 秒，test 会红）：
@@ -1247,7 +1258,7 @@
         zh: "被连到第 " + def.hitsTaken + " 下时受身翻滚脱出，起身已换到对手侧后" });
       def.hitsTaken = 0;
     }
-    if (def.hitsTaken >= 4 && def.state !== "down" && (def.z || 0) < 1.2) {
+    if (def.hitsTaken >= 4 && def.state !== "down" && !def.wantDown && !def.launched && !def.rules.noDodge && (def.z || 0) < 0.12) {
       def.state = "dodge"; def.roll = 0.5; def._escape = true;
       def.hitstun = Math.max(def.hitstun, 0.42); def.iframes = 0.40;
       def.vx += Math.cos(dirAng) * 6.2; def.vy += Math.sin(dirAng) * 6.2;
@@ -1265,11 +1276,12 @@
     }
         // ⚠ 受身/翻滚那一拍不能又被写成 hitstun —— 否则画面上还是"挨了一下站着"，
         //   受身只在事件层存在（2026-10-01 修：escape 那一拍保留 dodge 状态，看得出是翻出去）。
-    if (!def._escape) def.state = "hitstun"; else def._escape = false;
+    if(v.spell && !def._escape)def.hitstun=Math.max(def.hitstun,.24);
+    if (!def._escape) def.state = "hitstun"; else { def._escape = false; ACTIONS.beginRoll(sim, def, {escape:true}); }
     def.phase = "";
     // 击倒生效点（2026-09-29）：上面那一行会把状态统一写成 hitstun，所以"要倒地"必须放在它后面才不会被覆盖
     //   （第一版把 def.state="down" 写在前面 → 下一帧又变回 hitstun/move，实测 getup 永远不触发）。
-    if (def.wantDown) { def.wantDown = false; def.state = "down"; def.post = "stand"; def.vz = 0; def.rising = false; def.fallT = 0; def.hitstun = Math.max(def.hitstun, def.downT || 1.6); }   // 躺的时间在这里落地（已过连段衰减）；fallT 归零＝这一跤**从 0 开始倒**（旧版只在第一跤重置，第二跤起 ft 直接是 1 → 一帧躺平，实测单帧胸口 0.256 米）
+    if (def.wantDown) { def.wantDown = false; ACTIONS.beginDown(sim, def, def.downT); }   // 躺的时间在这里落地（已过连段衰减）；fallT 归零＝这一跤**从 0 开始倒**（旧版只在第一跤重置，第二跤起 ft 直接是 1 → 一帧躺平，实测单帧胸口 0.256 米）
     const fromAir = atk.z > 0.4;
     atk.lastOutcome = "hit"; def.lastOutcome = "hit";
     // 连击计数：衔接技（如"大剑挥砍→黯然销魂掌"）靠它判断"该接招了"
@@ -1307,8 +1319,8 @@
     // 决胜（28 秒后）：血量低于 35% 的人被打中即终结 —— 久战必须分胜负，也让"最后几秒"有戏。
     const finish = def.hp <= 0 || (v.finisher && def.hp <= def.hpMax * 0.28) || (sim.t > 28 && def.hp <= def.hpMax * 0.35);
     if (finish) {
-      def.hp = 0; def.state = "down"; def.fallT = 0; def.post = "stand"; def.hitstun = 3;
-      def.z = 0; def.vz = 0;                            // 倒地就是落地，不会停在空中
+      def.hp = 0; def.state = def.z > 0.05 ? "hitstun" : "down"; def.fallT = 0; def.post = "stand"; def.hitstun = 3;
+      def.mustLand = true; def.launched = def.z > 0; def.motion = null; // KO preserves the physical fall; no teleport to ground
       sim.events.push({ t: +sim.t.toFixed(3), type: "ko", who: def.id, x:+def.x.toFixed(3), y:+def.y.toFixed(3), by: atk.id, tech: v.zh, air: fromAir });
       if (sim._last) sim._last.ko = true;
     }
@@ -1651,8 +1663,22 @@
       ? { kind: "attack", variant: variant || pickVariant(f, opp, rng), reason }
       : { kind: "approach", reason: String(reason) + "-close" };
     // 对手已倒地：不再追打，稳住架势看着对手（收势）
-    if (opp.state === "down") return { kind: "stand" };
-    if (f.sta < 22) return { kind: "recover", reason: "stamina" };   // 体力见底先回气（取 GPT 9.13），而不是站着发呆
+    if (opp.state === "down") {
+      if (opp.hp <= 0) return { kind: "stand" };
+      // A knockdown is a tactical reset, not the end: circle to a new angle
+      // while the opponent rises, rather than standing still for two seconds.
+      return f.sta < 30 ? {kind:"recover",reason:"knockdown_reset"} :
+        {kind:"flank",dir:f.id === "A" ? 1 : -1,reason:"watch_recovery"};
+    }
+    if (f.sta < 22) return { kind: "recover", reason: "stamina" };
+    // Match an airborne opponent before ground combo/stance choices consume the
+    // decision. Existing flight budget, stamina and cooldown still apply.
+    if (f.mob.flight && f.z < 0.3 && opp.z > 1.5 && f.sta > 34 &&
+        f.airCd <= sim.t && sim.t >= (f.flightCd || -9) &&
+        (f.flights || 0) < flightCap(f) && canLeap(f, sim, 26, "flight")) {
+      return {kind:"takeoff",reason:"airDuel"};
+    }
+   // 体力见底先回气（取 GPT 9.13），而不是站着发呆
     // ⓪-2 连招窗口（取 GPT 9.13 的收紧版，2026-09-25 放宽节奏）：必须**有接触结果**
     //   （命中 / 被架住 / 对拼 —— 架住与对拼也要接着压，不然"一招被挡就各自站直"），最多四段、
     //   双方高度合理、不追打倒地者，而且够得着。
@@ -2135,7 +2161,7 @@
     // 蓄力与起手期间**允许继续转向**（对手绕到侧面时人也跟着转）；判定帧与收招仍然锁定朝向，
     //   所以"打空之后要重新转身"的代价保留。
     const turning = f.state === "cast" || (f.state === "attack" && f.phase === "windup");
-    const lock = !turning && (f.state === "attack" || f.state === "dodge" || f.state === "hitstun" || f.state === "stagger" || f.state === "down" || f.state === "land");
+    const lock = ACTIONS.locked(f) || !turning && (f.state === "attack" || f.state === "dodge" || f.state === "hitstun" || f.state === "stagger" || f.state === "down" || f.state === "land");
     if (!lock) {
       const want = turning ? (f.faceTarget != null ? f.faceTarget : toOpp) : toOpp;
       const d = norm(want - f.face);
@@ -2251,8 +2277,8 @@
         const a = toOpp + (it.dir || 1) * (Math.PI / 2) + (rng() < 0.35 ? Math.PI : 0);
         const v = 7.2 * f.prof.speed;
         f.vx = Math.cos(a) * v; f.vy = Math.sin(a) * v;
-        f.state = "dodge"; f.roll = 0.42; f.hitstun = Math.max(f.hitstun, 0.42);
-        f.post = "crouch"; f.iframes = Math.max(f.iframes || 0, 0.26);
+        ACTIONS.beginRoll(sim, f);
+        f.post = "crouch";
         f.sta = Math.max(0, f.sta - 20);
         f.stats.dodges++; f.stats.rolls = (f.stats.rolls || 0) + 1;
         f.counterUntil = Math.max(f.counterUntil || 0, sim.t + 0.45);   // 起身接反击
@@ -2583,7 +2609,7 @@
     f.airHold = 0; f.airAtkLeft = 0; f.airAtkTimer = 0;
     f.wallT = 0; f.wasHover = false; f.wasStall = false;      // 落地＝离开滞空（不复位的话整场只会记一次 air_stall）
     // 落地不打断正在出的招（俯冲命中落地也算数），只给落地屈膝与硬直；否则会出现姿态硬切
-    const busy = f.state === "attack" || f.state === "dodge" || f.state === "cast";
+    const busy = f.state === "attack" || f.state === "dodge" || f.state === "cast" || f.state === "hitstun" || f.state === "stagger";
     if (f.state !== "down" && !busy) { f.state = hard ? "land" : f.state; f.landLock = hard ? 0.22 : 0.10; }
     else if (busy && hard) f.landLock = Math.max(f.landLock, 0.16);
     f.post = "stand";
@@ -2596,7 +2622,7 @@
         f.launched = false; f.launchedAt = 0;
         f.state = "down"; f.post = "stand"; f.vz = 0; f.fallT = 0;   // fallT 归零＝这一跤从 0 开始倒（否则第二跤起 ft 直接是 1，一帧躺平）
         f.downT = Math.min(2.6, Math.max(1.5, 1.0 + impact * 0.22));   // 落地越重躺得越久（1.5~2.6 秒）
-        f.hitstun = Math.max(f.hitstun || 0, f.downT);
+        ACTIONS.beginDown(sim, f, f.downT);
         f.iframes = Math.max(f.iframes || 0, 0.25);
         f.stats.knockdowns = (f.stats.knockdowns || 0) + 1;
         sim.events.push({ t: +sim.t.toFixed(3), type: "knockdown", who: f.id, x: +f.x.toFixed(3), y: +f.y.toFixed(3), z: 0,
@@ -2622,18 +2648,21 @@
         blast(sim, f, f.x, f.y, +Math.max(R, blastRadius(f.prof.tier, 1.1) * 0.6).toFixed(2), 1.1, "落地冲击");
       }
     }
+    if(f.hp<=0){f.motion=null;ACTIONS.beginDown(sim,f,3);}
     f.peakZ = 0;
   }
 
   // ── 主循环 ───────────────────────────────────────────────────────────
   function simulate(opt) {
     const o = opt || {};
+    if (CONTRACT) CONTRACT.validate(o);
     const seed = (o.seed == null ? 20260911 : o.seed) >>> 0;
     const rng = mulberry32(seed);
     const arena = o.arena || { w: 20, h: 12 };
     if(!Number.isFinite(arena.w)||!Number.isFinite(arena.h)||arena.w<2||arena.h<2) throw Error('Invalid arena');
     if(o.duration!=null&&(!Number.isFinite(o.duration)||o.duration<DT||o.duration>120)) throw Error('Duration must be between 1/60 and 120 seconds');
     const maxT = o.duration || 30;
+    const commands = CHOREOGRAPHY.validate(o.choreography || [], maxT);let commandIndex=0;
     const A = makeFighter(Object.assign({ id: "A", rules:o.rules||{}, speed:o.speed||1, x: arena.w * 0.5 - 1.6, y: arena.h * 0.5, face: 0 }, o.A));
     const B = makeFighter(Object.assign({ id: "B", rules:o.rules||{}, speed:o.speed||1, x: arena.w * 0.5 + 1.6, y: arena.h * 0.5, face: Math.PI }, o.B));
     // 开局决策错峰：否则"先手方"永远先出手、永远被反击，同级对局会变成一边倒
@@ -2750,6 +2779,27 @@
 
     for (let step = 0; step < Math.round(maxT / DT); step++) {
       sim.t = step * DT;
+      // Authored actions are optional; rehearsal uses the same physics and clocks.
+      while(commandIndex<commands.length && commands[commandIndex].t<=sim.t+1e-7){
+        const c=commands[commandIndex++], f=c.who==='A'?A:B, opp=f===A?B:A;
+        let reason='';
+        if(f.hp<=0)reason='角色已被击败';
+        else if(lockCheck(f))reason='前一动作尚未结束';
+        else if(c.kind==='flight'&&!f.mob.flight)reason='等级未解锁飞行';
+        else if(['roll','down'].includes(c.kind)&&f.z>.12)reason='动作需要先落地';
+        else if(['roll','dodge'].includes(c.kind)&&f.rules.noDodge)reason='规则禁止闪避';
+        if(reason){sim.events.push({t:+sim.t.toFixed(3),type:'command_rejected',who:f.id,kind:c.kind,reason});continue;}
+        sim.events.push({t:+sim.t.toFixed(3),type:'command_start',who:f.id,kind:c.kind,scheduled:c.t});
+        if(c.kind==='land'){f.mustLand=true;f.launched=false;f.vz=Math.min(f.vz,-1);}
+        else if(c.kind==='launch'){
+          if(!o.rehearsal){sim.events.push({t:+sim.t.toFixed(3),type:'command_rejected',who:f.id,kind:c.kind,reason:'受击演练仅在排练模式可用'});continue;}
+          f.launched=true;f.launchedAt=sim.t;f.vz=Math.sqrt(2*G_Z*1.4);f.state='hitstun';f.hitstun=.5;
+          sim.events.push({t:+sim.t.toFixed(3),type:'launch',who:f.id,apex:1.4,airT:2*f.vz/G_Z,z:f.z,rehearsal:true});
+        }else if(c.kind==='down'){
+          if(!o.rehearsal){sim.events.push({t:+sim.t.toFixed(3),type:'command_rejected',who:f.id,kind:c.kind,reason:'倒地演练仅在排练模式可用'});continue;}
+          ACTIONS.beginDown(sim,f,1.6);sim.events.push({t:+sim.t.toFixed(3),type:'knockdown',who:f.id,z:f.z,rehearsal:true});
+        }else{f.intent={kind:c.kind==='flight'?'takeoff':c.kind,dir:c.kind==='leap'?'up':c.dir,reason:c.kind==='leap'?'airStrike':'choreography',variant:c.kind==='attack'?([...VARIANTS,...AIR_VARIANTS].find(v=>v.key===c.variant)||pickVariant(f,opp,f.rng)):undefined};steer(sim,f,opp,DT,f.rng);f.decideT=c.hold||.15;}
+      }
       // 逐帧交替处理顺序：否则"后处理的一方"总是拿到对方的最新位置，
       // 会形成系统性优势（同级同风格对局会变成一边倒）
       const list = (step % 2 === 0) ? [A, B] : [B, A];
@@ -2814,7 +2864,7 @@
         if (f.state === "hitstun" || f.state === "stagger") { if (f.hitstun <= 0 && f.state === "hitstun") f.state = "idle"; if (f.hitstun <= 0 && f.state === "stagger") f.state = "idle"; }
            // 起身（2026-09-29）：被打倒（knockdown，非 KO）躺满硬直后自己爬起来，并留一点无敌帧 ——
            //   原来 down 只出现在 KO 那一下（比赛随即结束），所以从来没有"起身"这一拍。
-                      if (f.state === "down" && f.hp > 0) {
+                      if (f.state === "down" && f.hp > 0 && !f.motion) {
              // 起身分两段（2026-09-29）：**先爬起 0.6 秒**（躺→撑地→站起，3D 与提示词都要有这段时间），
              //   再站定。原来 hitstun 一到就直接变 idle —— 素材里只有"躺"，没有"爬起"这一拍。
              const RISE = 0.6;
@@ -2841,7 +2891,8 @@
           }
         } else f.airStun = 0;
         if (f.state === "block" && f.blockHold <= 0) f.state = "idle";
-        if (f.state === "dodge" && f.hitstun <= 0) { f.state = "idle"; f.post = "stand"; }
+        if (f.state === "dodge" && f.hitstun <= 0 && !f.motion) { f.state = "idle"; f.post = "stand"; }
+        ACTIONS.tick(sim, f, DT);
         // 久战升级：14 秒后出手越来越重、20 秒后双方都不再举架磨时间
         // （久战必分胜负，而不是两只"乌龟"拖到时间到）
         // 飞行档（7 级以上）掉体力明显更慢：他们是"浮空战斗"的主力，不能打到二十秒就没气落地
@@ -2938,11 +2989,11 @@
         if (f.hitStreak > 0 && sim.t - (f.lastHitAt == null ? -9 : f.lastHitAt) > 3) f.hitStreak = 0;
         // 决策（12Hz）
         f.decideT -= DT;
-        if (!lockCheck(f) && f.decideT <= 0) {
+        if (!o.rehearsal && !lockCheck(f) && f.decideT <= 0) {
           f.decideT = 1 / 12 + f.rng() * 0.03;
           f.intent = decide(sim, f, opp, f.rng);
         }
-        if (!lockCheck(f)) {
+        if (!o.rehearsal && !lockCheck(f)) {
           if (f.state !== "block") f.state = "idle";
           steer(sim, f, opp, DT, f.rng);
         } else if (f.state === "attack" && f.phase === "windup") {
@@ -2982,14 +3033,14 @@
         const drag = Math.pow(f.z > 0.2 ? 0.10 : (0.02 + scen.slick * 0.25), DT);
         f.vx *= drag; f.vy *= drag;
         if (f.z > 0 || f.vz !== 0) {
-          const hovering = f.mob.flight && f.z > 0.15 && !f.mustLand && f.sta > 12;
+          const hovering = !f.launched && f.hp > 0 && !ACTIONS.locked(f) && f.mob.flight && f.z > 0.15 && !f.mustLand && f.sta > 12;
           // 轻功短滞空（3~6 级）：跃到最高点提气停住一口气，能停 mob.float 秒、在空中打一两下再落。
           //   "短暂在空中停留打斗"是用户明确要的档位能力，所以它不是飞行，而是"提气"。
           //   ⚠ 必须停在**接近最高点**：早停会在半米处就凝住，看起来像"跳不起来"（实测 3 级只到 0.5 米）。
           // ⚠ 不判 !mustLand：起跳本身要花气力，扣完就可能被置上 mustLand，
           //   于是"提气停一口气"这个动作永远做不出来（实测 7 次轻功突袭只换来 1 次滞空）。
           //   滞空是起跳换来的收益，只要还有一点气就允许停这一口；之后照样落地。
-          const floatTop = (f.mob.float || 0) > 0 && !f.mob.flight && f.z > 0.55 && f.vz <= 0.6 && f.vz > -2.9 &&
+          const floatTop = !f.launched && f.hp > 0 && (f.mob.float || 0) > 0 && !f.mob.flight && f.z > 0.55 && f.vz <= 0.6 && f.vz > -2.9 &&
                            (f.airHold || 0) < f.mob.float && f.sta > 8;
           if (hovering && f.vz <= 0.5 && f.z <= f.mob.hover + 0.35) {
             f.vz = f.z > f.mob.hover ? -1.6 : 0;      // 悬停：停在档位高度，超了缓慢下沉
@@ -3557,7 +3608,7 @@
       sim.stats_endShots = sim.shots.length;
       sim.shots.length = 0;
     }
-    function lockCheck(f) { return f.state === "attack" || f.state === "dodge" || f.state === "cast" || f.state === "hitstun" || f.state === "stagger" || f.state === "down" || f.state === "land"; }
+    function lockCheck(f) { return ACTIONS.locked(f) || f.state === "attack" || f.state === "dodge" || f.state === "cast" || f.state === "hitstun" || f.state === "stagger" || f.state === "down" || f.state === "land"; }
     // 真实阶段进度 phaseP（0=起手开始，1=收招结束）：GPT 9.13 的 rig 用它驱动姿态插值 ——
     //   比按 tp 猜阶段边界准，起手末/判定末的姿态会正好落在阶段切换上。
     function phasePOf(f) { return (f.state === "attack" && f.dur)
@@ -3572,16 +3623,19 @@
                techKey:f.tech?f.tech.key:"", tp:f.tech&&f.dur?fr(Math.min(1,f.techT/(f.dur.w+f.dur.a+f.dur.r))):0,
                attackReach:f.tech?fr(f.reach*f.tech.reach):f.reach, arcFrom:fr(f.arcFrom),
                tech: f.tech ? f.tech.zh : "", hp: fr(f.hp), gd: fr(f.guard), sa: fr(f.sta),
-               roll: +(f.roll || 0).toFixed(2),
+               roll: +(f.roll || 0).toFixed(2), ...ACTIONS.snapshot(f,sim.t),
                ba: f.bladeAng == null ? null : fr(f.bladeAng),
-               ft: f.state === "down" ? +Math.min(1, (f.fallT || 0) / 0.55).toFixed(3) : 0,
+               ft: f.state === "down" ? +Math.min(1, (f.fallT || 0) / (f.motion?.fall || 0.55)).toFixed(3) : 0,
                // 起身进度 rise（0→1，撑地爬起那 0.6 秒）：3D 姿态层用它把身体**连续**转回来。
                //   没有它的话，倒地那 0.6 秒一直保持"躺平"，状态一变 idle 就一帧弹起（实测单帧胸口 0.267 米）。
                rise: (f.state === "down" && f.rising) ? +Math.max(0, Math.min(1, 1 - (f.hitstun || 0) / (f.riseT || 0.6))).toFixed(3) : 0 };
     }
-    const winner = A.state === "down" && B.state === "down" ? "draw" : A.state === "down" ? B.id : (B.state === "down" ? A.id
-      : (A.hp / A.hpMax > B.hp / B.hpMax + 0.02 ? A.id : (B.hp / B.hpMax > A.hp / A.hpMax + 0.02 ? B.id : "draw")));
-    const counts = (t) => sim.events.filter(e => e.type === t).length;
+    // A recoverable knockdown is never a loss. KO uses the recorded outcome;
+    // a timeout compares remaining HP, regardless of either fighter's pose.
+    const winner = CONTRACT ? CONTRACT.winner(A, B, sim.over) :
+      (sim.over || (A.hp/A.hpMax > B.hp/B.hpMax + 0.02 ? "A" : B.hp/B.hpMax > A.hp/A.hpMax + 0.02 ? "B" : "draw"));
+    const eventCounts = CONTRACT ? CONTRACT.eventCounts(sim.events) : sim.events.reduce((m,e)=>(m[e.type]=(m[e.type]||0)+1,m),{});
+    const counts = (t) => eventCounts[t] || 0;
     // 招式库：本场若自动收纳了新招式 → 落盘（下次同名招式直接调用，不必再生成）
     if (MOVES && _libState.dirty) { try { MOVES.saveUser(); } catch (e) { /* 浏览器端由界面层存 localStorage */ } }
     return {
