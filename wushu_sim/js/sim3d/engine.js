@@ -1550,7 +1550,7 @@
     const gap = Math.hypot(opp0.x - f.x, opp0.y - f.y);
     const cRange = (cRange1[1] > 1.8 && gap < 3.5 && f.prof.tier < 7) ? [Math.min(cRange1[0], 0.8), 1.2] : cRange1;
     f.castDur = pickInRange(sim, cRange);
-    f.castQuick = cRange !== cRange0;
+    f.castQuick = cRange !== cRange1;
     f.castEff = eff; f.castRange = cRange;
     f.state = "cast"; f.castT = 0; f.castSpell = sp;f.castSourceId=originalSpell.id;
     // 施法要正对目标（用户：「法术释放不是攻击对手」）：起手即对准，蓄力期间还会跟着对手微调

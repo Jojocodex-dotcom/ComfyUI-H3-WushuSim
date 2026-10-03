@@ -1,6 +1,6 @@
 {
-  "synced_at": "2026-10-02T22:40:25+08:00",
-  "source": "H:\\wushulong\\H3-Studio-v17.1-源码\\h3",
+  "synced_at": "2026-10-03T21:00:14+08:00",
+  "source": "H:\\wushulong\\H3-Studio-v20.6.6-源码",
   "versions": "{\"engine\": \"sim3d-2.1\", \"combatLogic\": \"fight-logic-0.2\", \"ltx2\": \"ltx2-step2-0.2\"}",
   "files": {
     "core/combat-contract.js": {
@@ -68,7 +68,7 @@
       "bytes": 1543
     },
     "sim3d/engine.js": {
-      "sha256": "f942baec1c3269fa4b0c1f61ab484556dd60acf58e381a926df3b026a0212bfe",
+      "sha256": "4ee315f6c8a38e53f4904a74f2419780fe1e1d3ef93dbc83e5af52d1386c8e0e",
       "bytes": 276662
     },
     "sim3d/moves.js": {

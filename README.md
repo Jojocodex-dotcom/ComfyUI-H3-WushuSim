@@ -14,6 +14,9 @@
 > 新增 `sim3d/skill-catalog.js` 等模块，`engine/pipeline/routines/moves` 一并更新；
 > 同步清单改为「依赖闭包 ∪ 历史清单」共 26 个文件，避免再漏 `Cannot find module`。
 
+> **快照更新（2026-10-03 · v20.6.6）**：内核同步自 H3 武斗工作室 **v20.6.6** ——
+> `sim3d/engine.js` 更新（engine `sim3d-2.1`），同步清单仍为依赖闭包 ∪ 历史清单共 26 个文件。
+
 ## 目录
 
 - [功能与原理](#功能与原理)
