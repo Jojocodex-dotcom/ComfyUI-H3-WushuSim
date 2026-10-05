@@ -1,6 +1,6 @@
 {
-  "synced_at": "2026-10-05T16:27:31+08:00",
-  "source": "H:\\wushulong\\_work\\_recheck\\exe\\web",
+  "synced_at": "2026-10-05T16:31:57+08:00",
+  "source": "H:\\wushulong\\H3-Studio-Full-2026-10-05",
   "versions": "{\"engine\": \"sim3d-2.1\", \"combatLogic\": \"fight-logic-0.2\", \"ltx2\": \"ltx2-step2-0.2\"}",
   "files": {
     "core/combat-contract.js": {
