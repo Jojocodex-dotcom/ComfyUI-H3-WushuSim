@@ -1,6 +1,6 @@
 {
-  "synced_at": "2026-10-05T20:24:24+08:00",
-  "source": "H:\\wushulong\\H3-Studio-Flow-Fixed-2026-10-05",
+  "synced_at": "2026-10-06T02:09:54+08:00",
+  "source": "H:\\wushulong\\H3-Studio-English-UI-Fixed-2026-10-06",
   "versions": "{\"engine\": \"sim3d-2.1\", \"combatLogic\": \"fight-logic-0.2\", \"ltx2\": \"ltx2-step2-0.2\"}",
   "files": {
     "core/combat-contract.js": {
@@ -96,8 +96,8 @@
       "bytes": 12768
     },
     "sim3d/terrain.js": {
-      "sha256": "3e5c9f76878199d9e92108e947c041f76d8740be3a025af85b688a21a2749365",
-      "bytes": 1222
+      "sha256": "945ec0b66cfd42408ac762457a8df47ef7c1c8eee786056ed418386b5af5862c",
+      "bytes": 2884
     },
     "templates/axes.js": {
       "sha256": "d8281b13bbc19b05c338a4444142d47509633ce88031f8df42e587ff0cdd9e08",
