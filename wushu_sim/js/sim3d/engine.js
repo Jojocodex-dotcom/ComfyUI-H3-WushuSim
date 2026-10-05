@@ -13,9 +13,9 @@
  *      等级越高反应越快、出手越快、伤害越重，而不是简单堆数值。
  * ========================================================================== */
 (function (root, factory) {
-  if (typeof module === "object" && module.exports) module.exports = factory();
-  else root.SIM3D = factory();
-})(typeof globalThis !== "undefined" ? globalThis : this, function () {
+  if (typeof module === "object" && module.exports) module.exports = factory(require("./terrain"));
+  else root.SIM3D = factory(root.H3_TERRAIN);
+})(typeof globalThis !== "undefined" ? globalThis : this, function (TERRAIN) {
   "use strict";
 
   const VERSION = "sim3d-2.1";
@@ -91,7 +91,7 @@
     aerial: { key:"aerial", zh:"空战",   obstacles:0, cover:false, ring:0,   chase:false, aerial:true,  slick:0,    water:0,    ai:{ move:0.16,  def:-0.18, atk:0.10 } },
     water:  { key:"water",  zh:"水战",   obstacles:0, cover:false, ring:0,   chase:false, aerial:false, slick:0.20, water:0.30, ai:{ move:0.06,  def:0.04,  atk:0.14 } }
   };
-  function scenario(id) { return SCEN[id] || SCEN.none; }
+  function scenario(id) { const p=TERRAIN?.presets[id];return p?{...SCEN[p.base],key:id,zh:p.zh}:SCEN[id] || SCEN.none; }
   // 空战：场地本身就是高空，全员获得"借风踏空"的底子（低等级也能在空中打），
   // 但档位越高仍飞得越高（凡人级踏空 2.8 米 vs 灭世级御空 6.5 米）。
   function aerialFloor(m) {
@@ -288,6 +288,7 @@
       // 起跳纪律（v0.5）：每一次起跳都要有目的 + 每场配额 + 滞空预算，杜绝无意义弹跳
       leaps: 0, lastLeapT: -9, airT: 0, airIdleT: 0, leapWhy: null, leapDenied: 0, leapWhyLog: [],
       purposeLog: [],                   // 每个决策的目的日志（审计用）
+      customMoves:o.customMoves||[],customDefenses:o.customDefenses||[],abilityCd:{},defenseConfig:o.defenseConfig||{},lastDodgeAt:-9,lastBlockAt:-9,blockChain:0,dodgeChain:0,
       spells: o.spells || [], spellCd: {},    // 远程法术（来自角色卡「法术」组，卡里没配时由 pipeline 按等级自动补内力技）
       qi: o.qi || { label: "无", burst: 0, kb: 0, castBonus: 0 },   // 内力外放档（1~2 级为 0＝纯肉身）
       fx: o.fx || null,                                            // 特效分级（等级×风格档）：配色/形状/体量/破坏/镜头
@@ -379,10 +380,10 @@
   // 这是"飞起来就打不着"的规则来源，也是"把对手打下来"的战术基础。
   function defSpan(f) {
     const top = f.post === "crouch" ? 1.05 : (f.state === "down" ? 0.55 : 1.75);
-    return [f.z + 0.05, f.z + top];
+    return [f.z + (f.groundZ||0) + 0.05, f.z + (f.groundZ||0) + top];
   }
   function atkBand(f, v) {
-    const base = f.z;
+    const base = f.z + (f.groundZ||0);
     const hi = v.h === "high" ? 1.95 : (v.h === "low" ? 0.85 : 1.50);
     const lo = v.air
       ? base - (v.dive ? 2.40 : 1.10)                       // 空中招向下延伸：俯冲能打到地面
@@ -917,7 +918,7 @@
           r = cl(mid(libMove.timing.recover) * slow, r);
         }
         // 距离与扇角：库是来源，但**必须克隆**（否则会改到共享的 VARIANTS 表）
-        const patch = { libMove: { zh: libMove.zh, prep: libMove.prep, act: libMove.act, effect: libMove.effect,
+        const patch = { libMove: { zh: libMove.zh, prep: libMove.prep, act: libMove.act, effect: v.effect || libMove.effect,
                                    follow: libMove.follow, timing: libMove.timing, range: libMove.range,
                                    arc: libMove.arc, band: libMove.band, source: libMove.source } };
         if (driveParams) {
@@ -1007,7 +1008,7 @@
     if(v.skillId) f.cooldowns[v.skillId]=sim.t+v.cooldown;
     f.stats.attacks++;
     sim.events.push({ t: +sim.t.toFixed(3), type: "attack", who: f.id, tech: v.zh, key: v.key,
-                      dur: {w,a,r}, height:v.h, reach:f.reach*v.reach, skillId:v.skillId||null,
+                      dur: {w,a,r}, effect:v.effect||undefined, height:v.h, reach:f.reach*v.reach, skillId:v.skillId||null,
                       chain: f.chainDepth || 0, reason: chained ? "confirmed_followup" : "opening",
                       heavy: v.key === "heavy" || !!v.finisher, finisher: !!v.finisher,
                       z: +f.z.toFixed(3), air: !!v.air, dive: !!v.dive,
@@ -1043,7 +1044,7 @@
       sim.events.push({ t: +sim.t.toFixed(3), type: "dodge", who: def.id, by: atk.id, x: +def.x.toFixed(3), y: +def.y.toFixed(3),
                         crouch: false, zh: "受身脱出中，这一下从身侧擦空" });
       // 闪开也是"接手的起点"（港式：闪身 → 立刻反打），窗口比格挡略短
-      if (def.sta > 20) { def.counterUntil = sim.t + 0.45; def.comboUntil = sim.t + 0.5; def.lastOutcome = "block"; def.chainDepth = 0; }
+      if (def.sta > 20 && (++def.dodgeChain >= Math.max(1,+def.defenseConfig.dodgesForCounter||1))) { def.dodgeChain=0;def.counterUntil = sim.t + 0.45; def.comboUntil = sim.t + 0.5; def.lastOutcome = "block"; def.chainDepth = 0; }
       return;
     }
     const base = (v.damage == null ? atk.wpn.dmg * v.dmg * atk.prof.dmg : v.damage * (atk.rules.heavy ? 1.7 : 1)) * (def.esc || atk.esc || 1) * (atk.rules.lowDmg ? 0.3 : 1);
@@ -1077,8 +1078,8 @@
       // 挡完立刻接手反打（2026-09-29 修）：原来只给**攻方**继续压的窗口，防守方挡完什么都没有，
       //   于是"挡一下就各自站直"——格挡在画面上等于一次停顿，港片里最典型的"挡→卸→反打"永远接不上。
       //   现在给防守方一个短反击窗口（counterUntil：起手/收招各快 30%）＋ 连招窗口（comboUntil：下一拍直接出手）。
-      if (def.sta > 20) { def.counterUntil = sim.t + 0.5; def.comboUntil = sim.t + 0.55; def.chainDepth = 0; }
-    sim.events.push({ t: +sim.t.toFixed(3), type: "block", who: def.id, by: atk.id, tech: v.zh, x:+def.x.toFixed(3), y:+def.y.toFixed(3), guard: Math.round(def.guard),
+      if (def.sta > 20 && (++def.blockChain >= Math.max(1,+def.defenseConfig.blocksForCounter||1))) { def.blockChain=0;def.counterUntil = sim.t + 0.5; def.comboUntil = sim.t + 0.55; def.chainDepth = 0; }
+    sim.events.push({ t: +sim.t.toFixed(3), type: "block", who: def.id, by: atk.id, tech: v.zh,defenseTech:def.activeDefense?.zh||null,defenseEffect:def.activeDefense?.effect||null, x:+def.x.toFixed(3), y:+def.y.toFixed(3), guard: Math.round(def.guard),
                         z: +def.z.toFixed(3), spell: !!v.spell, dist: geo ? +geo.dist.toFixed(3) : null, reach: geo ? +geo.reach.toFixed(3) : null });
       if (def.guard <= 0) {                       // 崩防：被打空防守值 → 大硬直
         def.guard = 100 * 0.45; def.state = "stagger"; def.hitstun = 0.85;
@@ -1496,6 +1497,7 @@
   const SPELL_CAST = 0.34;                   // 施法前摇：可被打断（挨打就散功）
   function startCast(sim, f, sp) {
     if (sim.t < (f.castReadyAt || 0)) return false;
+    if (sp?.ultimate && (sim.ultimateUsed || sim.ultimateOwner && sim.ultimateOwner!==f.id)) return false;
     const requestedForm=SKILLS?.get(sp?.formKey||sp?.zh);if(requestedForm?.requiresAir&&f.z<=.4)return false;
     const named = SKILLS?.select(sp?.formKey || sp?.zh, f.formCursor || 0, f.z > .4);
     if (named && (f.prof.tier < named.tiers[0] || named.requiresAir && f.z <= .4)) return false;
@@ -1537,6 +1539,7 @@
       }
     }
     if(named){eff={...eff,zh:named.zh,prep:named.prep,fire:named.act,shape:named.fx?.shape||named.fx?.form,hit:SKILLS.fxDescription(named,'hit'),charge:named.timing.charge,release:named.timing.travel||named.timing.recover,form:named,particles:named.fx?.particles,light:named.fx?.light};f.formCursor=(f.formCursor||0)+1;}
+    if(sp.ultimateProfile){const u=sp.ultimateProfile;eff={...eff,prep:u.beats?.gather||eff.prep,fire:[u.beats?.shape,u.beats?.flight].filter(Boolean).join('；')||eff.fire,hit:u.beats?.impact||eff.hit,charge:u.charge||[1.76,3.14]};}
     const cRange0 = scaledRange(eff.charge, f.prof.tier, f.qi);
     // ── 施法时间（2026-09-25 用户要求"给足法术施法时间"）────────────────────
     //   蓄力时长 = 招式档 × 风格档（仙神斗法 1.9） × 等级档（7 级起每级 +28%）。
@@ -1548,7 +1551,8 @@
     //   压掉了就没有施法时间可言（用户反馈的正是这一点）。
     const opp0 = f === sim.A ? sim.B : sim.A;
     const gap = Math.hypot(opp0.x - f.x, opp0.y - f.y);
-    const cRange = (cRange1[1] > 1.8 && gap < 3.5 && f.prof.tier < 7) ? [Math.min(cRange1[0], 0.8), 1.2] : cRange1;
+    const cRange = sp.ultimate ? (sp.ultimateProfile?.charge || [1.76,3.14]) : (cRange1[1] > 1.8 && gap < 3.5 && f.prof.tier < 7) ? [Math.min(cRange1[0], 0.8), 1.2] : cRange1;
+    if(sp.ultimate) sim.ultimateOwner=f.id;
     f.castDur = pickInRange(sim, cRange);
     f.castQuick = cRange !== cRange1;
     f.castEff = eff; f.castRange = cRange;
@@ -1568,7 +1572,7 @@
     f.stats.spellCasts++;
     if (sp.linkOnly) { f.stats.linkCasts = (f.stats.linkCasts || 0) + 1; f.lastLinkT = sim.t; }
     const opp = f === sim.A ? sim.B : sim.A;
-    sim.events.push({ t: +sim.t.toFixed(3), type: "spell_cast", who: f.id, tech: sp.zh, key: "spell", link: !!sp.linkOnly,
+    sim.events.push({ t: +sim.t.toFixed(3), type: "spell_cast", ultimate:!!sp.ultimate, ultimateProfile:sp.ultimateProfile||null, who: f.id, tech: sp.zh, key: "spell", link: !!sp.linkOnly,
                       x: +f.x.toFixed(3), y: +f.y.toFixed(3), z: +f.z.toFixed(3),
                       dist: +Math.hypot(opp.x - f.x, opp.y - f.y).toFixed(2), reach: sp.reach,
                       formKey:named?.key||null, targeting:named?.targeting||null, vfx:named?.fx||null, chargeRange: cRange, chargeT: f.castDur, chargeMul: +chargeMul.toFixed(2), shape: eff.shape, track: !!eff.track,
@@ -1591,6 +1595,7 @@
     return true;
   }
   function releaseSpell(sim, f, sp) {
+    if(sp.ultimate){if(sim.ultimateUsed)return;sim.ultimateUsed=true;sim.ultimateOwner=null;}
     const opp = f === sim.A ? sim.B : sim.A;
     const eff = f.castEff || effectOf(sp);
     const rRange0 = scaledRange(eff.release, f.prof.tier, f.qi);
@@ -1606,14 +1611,14 @@
     const id = "S" + (++sim.shotSeq);
     const track = !!eff.track;
     sim.shots.push({ id, owner: f.id, sp, dmg: sp.damage, spd, eff,
-      x: f.x + Math.cos(a) * 0.45, y: f.y + Math.sin(a) * 0.45, z: f.z + 1.15,
+      x: f.x + Math.cos(a) * 0.45, y: f.y + Math.sin(a) * 0.45, z: f.z + (f.groundZ||0) + 1.15,
       vx: Math.cos(a) * spd, vy: Math.sin(a) * spd,
       life: +(actualFly + 0.55).toFixed(2), flyT: flyT, actualFly: actualFly, track: track, turn: eff.turn || 0.8,
       // 垂直跟踪（2026-09-25）：空战里双方高度一直在变，弹道原来只走水平线 → 从脚底下穿过去、
       //   "法术漫天飞却打不着"（实测空战 6 场里有 3 场首 5 秒全是 spell_fade）。给弹道一个有限的上/下修正速度。
       vz: 0, vCap: 3.5 });
-    sim.events.push({ t: +sim.t.toFixed(3), type: "spell_release", who: f.id, tech: sp.zh, shot: id,
-                      x: +f.x.toFixed(3), y: +f.y.toFixed(3), z: +(f.z + 1.15).toFixed(3), spd: +spd.toFixed(1), dist: +d.toFixed(2),
+    sim.events.push({ t: +sim.t.toFixed(3), type: "spell_release", ultimate:!!sp.ultimate, ultimateProfile:sp.ultimateProfile||null, who: f.id, tech: sp.zh, shot: id,
+                      x: +f.x.toFixed(3), y: +f.y.toFixed(3), z: +(f.z + (f.groundZ||0) + 1.15).toFixed(3), absoluteZ:true, spd: +spd.toFixed(1), dist: +d.toFixed(2),
                       formKey:sp.formKey||null, targeting:eff.form?.targeting||null, vfx:eff.form?.fx||null, recoverT:f.castRecovery||0, releaseRange: rRange0, releaseT: flyT, actualFly: actualFly, direction:+a.toFixed(4), shape: eff.shape, track: track, fire: eff.fire, radius: eff.radius });
     f.stats.castsDone = (f.stats.castsDone || 0) + 1;
     // ── 特效密度（仙神档）：脱手那一刻在身周炸开一圈气劲；7 级以上再抬一次"抬头能看见"的天象 ──
@@ -1804,7 +1809,7 @@
       // 近战风格：够得着就宁可靠近打，不站着对轰（只对"明显在兵器射程外"的情况例外）
       const wantCast = !(SP.approachCast && dist > f.reach * 1.6 === false && dist <= f.reach * 1.6);
       if (wantCast && f.stats.spellCasts < maxCasts && sinceCast >= gap) {
-        const ready = f.spells.filter(sp => !sp.linkOnly && (f.spellCd[sp.id] || 0) <= sim.t && f.sta > 14 + (sp.damage || 20) * 0.35);
+        const ready = f.spells.filter(sp => !sp.linkOnly && (!sp.ultimate || !sim.ultimateUsed) && (f.spellCd[sp.id] || 0) <= sim.t && f.sta > 14 + (sp.damage || 20) * 0.35);
         // 高等级不再"必须够不着才隔空打"：罡气级以上贴身也能放，近身下限随等级下探
         const minR = (f.qi && f.qi.burst >= 1.0) ? 0.8 : 1.6;
         const inR = ready.filter(sp => dist <= sp.reach && dist >= Math.min(minR, sp.reach * 0.35));
@@ -1812,14 +1817,14 @@
           // 明显在兵刃射程外 → 一定隔空打；贴身时只有小概率放（贴身主要靠气劲外放，不靠弹道）
           const outOfReach = dist > f.reach * 1.6;
           const chance = (0.08 + (f.qi ? f.qi.castBonus : 0)) * (SP.castChanceMul == null ? 1 : SP.castChanceMul);
-          if (outOfReach || rng() < chance) return { kind: "cast", spell: inR[0], reason: "spell" };
+          if (outOfReach || rng() < chance) return { kind: "cast", spell: inR.find(s=>s.ultimate) || inR[0], reason: "spell" };
         }
       }
     }
     // ⓪-a 自己在空中：只出空中招（且必须真的够得着），否则维持高度/落点
     if (f.z > 0.4) {
       // 空战也要预判：两个飞行档交手时对手一帧能挪十几厘米，不预判就是对着空气扑
-      const predAir = { z: Math.max(0, opp.z + (opp.vz || 0) * lead), post: opp.post, state: opp.state };
+      const predAir = { groundZ:opp.groundZ||0, z: Math.max(0, opp.z + (opp.vz || 0) * lead), post: opp.post, state: opp.state };
       if (f.airAtkLeft > 0 && distLead <= f.reach * 1.35 + 0.40) {
         const v = pickAirVariant(f, opp, rng);
         if (bandOverlap(atkBand(f, v), defSpan(predAir))) return { kind: "attack", variant: v, reason: "air" };
@@ -2268,33 +2273,43 @@
         f.state = "move"; break;
       }
       case "dodge": {
+        if(sim.t-f.lastDodgeAt < 1/Math.max(1,+f.defenseConfig.dodgePerSec||1000)){f.intent={kind:"space",dir:it.dir||1};break;}
+        const custom=f.customMoves.find(x=>x.kind==='dodge'&&(f.abilityCd[x.zh]||0)<=sim.t);
+        if(custom){f.abilityCd[custom.zh]=sim.t+custom.cd;}
+        f.lastDodgeAt=sim.t;
         if(f.rules.noDodge || f.sta < 12) { f.intent={kind:"approach"}; break; }
         const a = toOpp + (it.dir || 1) * Math.PI / 2 + (rng() < 0.25 ? Math.PI : 0);
-        const v = 6.4 * f.prof.speed;
+        const v = custom?clamp(custom.range/.34,1,12):6.4 * f.prof.speed;
         f.vx = Math.cos(a) * v; f.vy = Math.sin(a) * v;
         f.state = "dodge"; f.hitstun = Math.max(f.hitstun, 0.34);
         f.post = it.crouch ? "crouch" : "stand";
         f.sta = Math.max(0, f.sta - 12);
         f.stats.dodges++;
-        sim.events.push({ t: +sim.t.toFixed(3), type: "dodge", who: f.id, x:+f.x.toFixed(3), y:+f.y.toFixed(3), crouch: !!it.crouch });
+        sim.events.push({ t: +sim.t.toFixed(3), type: "dodge", who: f.id, x:+f.x.toFixed(3), y:+f.y.toFixed(3), crouch: !!it.crouch,tech:custom?.zh||'侧闪',effect:custom?.effect||'' });
         break;
       }
       case "roll": {
+        if(sim.t-f.lastDodgeAt < 1/Math.max(1,+f.defenseConfig.dodgePerSec||1000)){f.intent={kind:"space",dir:it.dir||1};break;}
+        const custom=f.customMoves.find(x=>x.kind==='roll'&&(f.abilityCd[x.zh]||0)<=sim.t);if(custom)f.abilityCd[custom.zh]=sim.t+custom.cd;
+        f.lastDodgeAt=sim.t;
         // 翻滚让开（2026-10-01）：比侧闪位移更大、过程有无敌帧、起身换到对手侧后（起身即能反击）
         if (f.rules.noDodge || f.sta < 20) { f.intent = { kind: "block" }; break; }
         const a = toOpp + (it.dir || 1) * (Math.PI / 2) + (rng() < 0.35 ? Math.PI : 0);
-        const v = 7.2 * f.prof.speed;
+        const v = custom?clamp(custom.range/.5,1,12):7.2 * f.prof.speed;
         f.vx = Math.cos(a) * v; f.vy = Math.sin(a) * v;
         ACTIONS.beginRoll(sim, f);
         f.post = "crouch";
         f.sta = Math.max(0, f.sta - 20);
         f.stats.dodges++; f.stats.rolls = (f.stats.rolls || 0) + 1;
         f.counterUntil = Math.max(f.counterUntil || 0, sim.t + 0.45);   // 起身接反击
-        sim.events.push({ t: +sim.t.toFixed(3), type: "dodge", who: f.id, roll: true, crouch: true,
+        sim.events.push({ t: +sim.t.toFixed(3), type: "dodge", who: f.id, tech:custom?.zh||'翻滚',effect:custom?.effect||'', roll: true, crouch: true,
           x: +f.x.toFixed(3), y: +f.y.toFixed(3) });
         break;
       }
       case "block": {
+        if(sim.t-f.lastBlockAt < 1/Math.max(1,+f.defenseConfig.blockPerSec||1000)){f.intent={kind:"guardSpace"};break;}
+        f.lastBlockAt=sim.t;
+        const custom=f.customDefenses.find(x=>(f.abilityCd[x.zh]||0)<=sim.t);if(custom){f.abilityCd[custom.zh]=sim.t+custom.cd;f.activeDefense=custom;sim.events.push({t:+sim.t.toFixed(3),type:'defense_start',who:f.id,tech:custom.zh,effect:custom.effect,cd:custom.cd});}else f.activeDefense=null;
         if(!canBlock(opp,f)) {
           // 挡不了（空手对刃之类）就**用脚步躲开**，不许原地站着（站着不动是最不像打斗的画面）
           const a = toOpp + (f.blockDir == null ? (f.blockDir = (rng() < 0.5 ? -1 : 1)) : f.blockDir) * Math.PI / 2;
@@ -2690,6 +2705,7 @@
     // ── 情景（v0.5）：把界面声明的情景规则真的接进结算 ────────────────────
     const scen = scenario(o.scenario);
     sim.scen = scen;
+    A.groundZ=TERRAIN.height(scen.key,A.x,A.y,arena);B.groundZ=TERRAIN.height(scen.key,B.x,B.y,arena);
     if (scen.aerial) { A.mob = aerialFloor(A.mob); B.mob = aerialFloor(B.mob); }
     // ── 可破坏环境（2026-09-25 用户：「高手打架的招式或法术打倒周围建筑物、道具都是会打碎的。
     //    而不是一点动静都没。越是厉害的人越夸张。」）────────────────────────────────
@@ -2715,7 +2731,7 @@
         const isMega = topTier >= 8 && i % 7 === 3;
         const isBuild = !isMega && topTier >= 5 && i % 3 === 0;
         const kinds = isMega ? MEGA : (isBuild ? BUILD : SMALL);
-        const kind = kinds[i % kinds.length];
+        let kind = kinds[i % kinds.length];if(scen.key==='bamboo')kind='竹柱';else if(scen.key==='mountain')kind='岩柱';else if(scen.key==='sea')kind='礁石';else if(scen.key==='clouds')kind='浮岩';
         const ang = (i / count) * Math.PI * 2 + rng() * 0.9;
         // 中间留出空场：小件铺在 0.75~1.6 倍中环、大型结构更外（高等级的破坏半径本来就够得着它们）
         // 内圈留空：物件一律放在外圈（否则会把交手区塞满，甚至把人夹住）
@@ -2735,8 +2751,8 @@
         // h＝这件东西有多高（米）：法术飞得比它高就不该被它挡住（空战/浮空法术常年在 2 米以上）
         const hh = isMega ? 5.5 + rng() * 2.5 : (isBuild ? 2.6 + rng() * 1.6 : (kind === "酒坛" ? 0.8 : 1.0 + rng() * 0.4));
         props0.push({ id: "P" + (i + 1), zh: kind, x: +px.toFixed(3), y: +py.toFixed(3),
-                      r: +rr.toFixed(2), tough: tough, hit: 0, broken: false, h: +hh.toFixed(2),
-                      building: !!(isMega || isBuild), mega: !!isMega });
+                      r: scen.key==='bamboo'?.18:+rr.toFixed(2), tough: scen.key==='bamboo'?1:tough, hit: 0, broken: false, h: scen.key==='bamboo'?5.4:+hh.toFixed(2),
+                      building: scen.key==='bamboo'||!!(isMega || isBuild), mega: !!isMega });
       }
       sim.props = props0;
     }
@@ -2920,7 +2936,7 @@
         const regen = f.z > 0.4 ? ((f.mob && f.mob.flight) ? 4 : 2) : (f.state === "block" ? 9 : (f.state === "attack" || f.state === "dodge" ? 3 : 16));
         f.sta = Math.min(f.staMax, f.sta + regen * DT * f.prof.stam);
         // 施法推进：前摇走完就放出去；中途被打断/换状态则散功
-        if (f.state !== "cast") { f.castSpell = null; f.castT = 0; f.auraOn = false; }
+        if (f.state !== "cast") { if(f.castSpell?.ultimate&&sim.ultimateOwner===f.id)sim.ultimateOwner=null;f.castSpell = null; f.castT = 0; f.auraOn = false; }
         if (f.state === "cast" && f.castSpell) {
           f.castT += DT;
           if (f.castT >= (f.castDur || SPELL_CAST)) {const form=f.castEff?.form;f.castRecovery=form?pickInRange(sim,form.timing.recover):.35;releaseSpell(sim, f, f.castSpell);f.castReadyAt=sim.t+f.castRecovery+(form?.timing.gap||.25);if(f.castSourceId)f.spellCd[f.castSourceId]=Math.max(f.spellCd[f.castSourceId]||0,f.castReadyAt+(form?.timing.cooldown||0));f.state="recover";f.recoverUntil=sim.t+f.castRecovery;f.castSpell=null;f.castT=0;f.castDur=0;f.auraOn=false;sim.events.push({t:+sim.t.toFixed(3),type:'cast_recovery',who:f.id,duration:f.castRecovery,readyAt:f.castReadyAt});}
@@ -3026,7 +3042,9 @@
       }
       // 物理积分 + 垂直轴（重力 / 悬停 / 落地）+ 边界
       for (const f of list) {
+        const terrainPrevious={x:f.x,y:f.y};
         f.x += f.vx * DT; f.y += f.vy * DT;
+        TERRAIN.move(f,scen.key,arena,terrainPrevious);
         // 残影：特效档 6 起，高速位移（冲刺 / 凌空 / 踏墙）沿途留下残影（仙侠身法的核心观感）
         const FL = (f.fx && f.fx.level) || 1;
         if (FL >= 6 && f.state !== "down") {
@@ -3199,6 +3217,7 @@
             f.bumpT = 0.35;                                  // 记一下"刚撞上掩体"，下面做侧向绕行
           }
         }
+        TERRAIN.move(f,scen.key,arena,terrainPrevious);
         // ── 掩体绕行（2026-09-23 修）：追人时如果掩体挡在"我→对手"的连线上，直着冲会**贴着掩体磨** ——
         //   实测一场追逐战 A 被木箱卡住十几秒、整场只 10 次命中、30 秒打不完。
         //   做法：把掩体在连线上的侧向偏移（叉积）判断出该往哪边绕，给一个切向速度分量。
@@ -3300,8 +3319,8 @@
         // 垂直跟踪：朝对手胸口高度做有限修正（不是制导导弹，只是"别从脚底下穿过去"）
         // 只在"目标真的在高处"时才修高度（贴地战不该有制导感），而且每秒最多修 3.5 米：
         //   这样爬升快的飞行目标仍然可以躲开弹道（"法术不是必中"是设计底线）。
-        if (def.z > 0.6 || Math.abs((def.z + 0.95) - s.z) > 1.0) {
-          const wantZ = def.z + 0.95;
+        if (def.z > 0.6 || Math.abs((def.z + (def.groundZ||0) + 0.95) - s.z) > 1.0) {
+          const wantZ = def.z + (def.groundZ||0) + 0.95;
           const cap = (s.vCap == null ? 3.5 : s.vCap) * DT;
           const step = clamp((wantZ - s.z) * Math.min(1, 5 * DT), -cap, cap);
           s.z += step; s.vz = step / DT;
@@ -3310,7 +3329,7 @@
         for (const pr of sim.props) {                       // 掩体先挡（法术也穿不过石墙木箱）
           if (pr.broken) continue;
           // 高度不够就挡不住（法术飞得比它高）：空战与浮空法术不该被地上的酒坛截住
-          if (Math.hypot(s.x - pr.x, s.y - pr.y) <= pr.r && s.z <= (pr.h || 1.2) + 0.5) {
+          if (Math.hypot(s.x - pr.x, s.y - pr.y) <= pr.r && s.z <= TERRAIN.height(scen.key,pr.x,pr.y,arena)+(pr.h || 1.2) + 0.5) {
             // 大威力法术（6 级起 / 气功半径 ≥0.9 米）：把掩体震碎，法术继续飞向目标
             const bigSpell = (owner.prof.tier || 1) >= 6 || ((s.eff && s.eff.radius) || 0) >= 0.9;
             if (bigSpell && pr.tough <= Math.max(2, Math.floor((owner.prof.tier || 1) * 0.7))) {
@@ -3321,7 +3340,7 @@
           }
         }
         if (!end && def.state !== "down") {
-          const dz = Math.abs(s.z - (def.z + 0.95));
+          const dz = Math.abs(s.z - (def.z + (def.groundZ||0) + 0.95));
           // 命中体积：横截面 + 招式半径；**垂直容差也随体量放大**（大法术是有厚度的气团，
           //   原来固定 1.15 米：飞在高处的对手一跳一沉就"擦着过去"，空战法术全是 spell_fade）
           const hitR = CAP_R + 0.30 + ((s.eff && s.eff.radius) || 0) * 0.35;
@@ -3377,8 +3396,8 @@
           const F = owner.fx || {};
           if (end.kind === "hit" && (info.mode === "hit" || info.mode === "wardbreak")) {
             owner.stats.spellHits++;
-            sim.events.push({ t: +sim.t.toFixed(3), type: "spell_hit", who: end.def.id, by: owner.id, tech: s.sp.zh, shot: s.id,
-                              x: +s.x.toFixed(3), y: +s.y.toFixed(3), z: +s.z.toFixed(3), range: +Math.hypot(s.x - owner.x, s.y - owner.y).toFixed(2),
+            sim.events.push({ t: +sim.t.toFixed(3), type: "spell_hit", ultimate:!!s.sp.ultimate, ultimateProfile:s.sp.ultimateProfile||null, who: end.def.id, by: owner.id, tech: s.sp.zh, shot: s.id,
+                              x: +s.x.toFixed(3), y: +s.y.toFixed(3), z: +s.z.toFixed(3), absoluteZ:true, range: +Math.hypot(s.x - owner.x, s.y - owner.y).toFixed(2),
                               hp: +end.def.hp.toFixed(1), power: +power.toFixed(2), heavy: heavy,
                               stun: +(info.stun || v.stun).toFixed(2), kb: +v.kb.toFixed(2),
                               damage: +(v.damage || 0).toFixed(1) });
@@ -3395,7 +3414,7 @@
             end.def.stats = end.def.stats || {};
             end.def.aftermath = { kind: hit.k, until: sim.t + (heavy ? 1.6 : 1.0) };
             sim.events.push({ t: +sim.t.toFixed(3), type: "spell_after", who: end.def.id, by: owner.id, tech: s.sp.zh,
-                              kind: hit.k, zh: hit.zh, x: +s.x.toFixed(3), y: +s.y.toFixed(3), z: +s.z.toFixed(3),
+                              kind: hit.k, zh: hit.zh, x: +s.x.toFixed(3), y: +s.y.toFixed(3), z: +s.z.toFixed(3), absoluteZ:true,
                               radius: +Math.max(0.4, radius).toFixed(2), stun: +(info.stun || v.stun).toFixed(2),
                               kb: +v.kb.toFixed(2), heavy: heavy,
                               palette: F.palette || "", shape: F.shape || "", fxLevel: F.level || 1 });
@@ -3407,7 +3426,7 @@
             }
           } else if (end.kind === "hit" && info.mode === "iframes") {
             sim.events.push({ t: +sim.t.toFixed(3), type: "spell_dodged", who: end.def.id, by: owner.id, tech: s.sp.zh, shot: s.id,
-                              x: +s.x.toFixed(3), y: +s.y.toFixed(3), z: +s.z.toFixed(3),
+                              x: +s.x.toFixed(3), y: +s.y.toFixed(3), z: +s.z.toFixed(3), absoluteZ:true,
                               range: +Math.hypot(s.x - owner.x, s.y - owner.y).toFixed(2) });
           } else if (end.kind === "hit") {
             // 护体硬吃（施法护体）或其它没有落到"真命中"的情形：**也必须有一条事件**
@@ -3416,11 +3435,11 @@
             const gr2 = Math.max(0.5, radius * 0.85);
             owner.stats.qiBursts = (owner.stats.qiBursts || 0) + 1;
             sim.events.push({ t: +sim.t.toFixed(3), type: "qi_burst", who: owner.id, by: owner.id, tech: s.sp.zh,
-              x: +s.x.toFixed(3), y: +s.y.toFixed(3), z: +s.z.toFixed(3), radius: +gr2.toFixed(2), kb: 0,
+              x: +s.x.toFixed(3), y: +s.y.toFixed(3), z: +s.z.toFixed(3), absoluteZ:true, radius: +gr2.toFixed(2), kb: 0,
               spell: true, absorbed: true, from: s.sp.zh, fxLevel: F3.level || 1,
               palette: F3.palette || "", shape: F3.shape || "", light: F3.light || "", destruction: [] });
             sim.events.push({ t: +sim.t.toFixed(3), type: "spell_absorbed", who: end.def.id, by: owner.id, tech: s.sp.zh, shot: s.id,
-              mode: info.mode || "none", x: +s.x.toFixed(3), y: +s.y.toFixed(3), z: +s.z.toFixed(3),
+              mode: info.mode || "none", x: +s.x.toFixed(3), y: +s.y.toFixed(3), z: +s.z.toFixed(3), absoluteZ:true,
               castTech: (end.def.castSpell && end.def.castSpell.zh) || "",
               range: +Math.hypot(s.x - owner.x, s.y - owner.y).toFixed(2),
               palette: F3.palette || "", shape: F3.shape || "", fxLevel: F3.level || 1 });
@@ -3431,11 +3450,11 @@
             const gr = Math.max(0.5, radius * 0.9);
             owner.stats.qiBursts = (owner.stats.qiBursts || 0) + 1;
             sim.events.push({ t: +sim.t.toFixed(3), type: "qi_burst", who: owner.id, by: owner.id, tech: s.sp.zh,
-              x: +s.x.toFixed(3), y: +s.y.toFixed(3), z: +s.z.toFixed(3), radius: +gr.toFixed(2), kb: +(v.kb * 0.4).toFixed(2),
+              x: +s.x.toFixed(3), y: +s.y.toFixed(3), z: +s.z.toFixed(3), absoluteZ:true, radius: +gr.toFixed(2), kb: +(v.kb * 0.4).toFixed(2),
               spell: true, guarded: true, from: s.sp.zh, fxLevel: F2.level || 1,
               palette: F2.palette || "", shape: F2.shape || "", light: F2.light || "", destruction: [] });
             sim.events.push({ t: +sim.t.toFixed(3), type: "spell_guard", who: end.def.id, by: owner.id, tech: s.sp.zh, shot: s.id,
-              x: +s.x.toFixed(3), y: +s.y.toFixed(3), z: +s.z.toFixed(3), through: !!end.through,
+              x: +s.x.toFixed(3), y: +s.y.toFixed(3), z: +s.z.toFixed(3), absoluteZ:true, through: !!end.through,
               guard: +((end.def.guard || 0)).toFixed(1), push: +(v.kb * 0.4).toFixed(2),
               dist: +Math.hypot(s.x - owner.x, s.y - owner.y).toFixed(2),
               palette: F2.palette || "", shape: F2.shape || "", fxLevel: F2.level || 1 });
@@ -3450,7 +3469,7 @@
                             x: +end.pr.x.toFixed(3), y: +end.pr.y.toFixed(3), z: 0, tech: s.sp.zh, spell: true, shot: s.id, broke, heavy: true });
         } else {
           sim.events.push({ t: +sim.t.toFixed(3), type: "spell_fade", who: owner.id, tech: s.sp.zh, shot: s.id,
-                            x: +s.x.toFixed(3), y: +s.y.toFixed(3), z: +s.z.toFixed(3) });
+                            x: +s.x.toFixed(3), y: +s.y.toFixed(3), z: +s.z.toFixed(3), absoluteZ:true });
         }
         sim.shots.splice(i, 1);
       }
@@ -3615,7 +3634,7 @@
     if (sim.shots && sim.shots.length) {
       sim.shots.forEach((s2) => {
         sim.events.push({ t: +sim.t.toFixed(3), type: "spell_fade", who: s2.owner, tech: s2.sp.zh, shot: s2.id,
-                          x: +s2.x.toFixed(3), y: +s2.y.toFixed(3), z: +s2.z.toFixed(3), unresolved: true });
+                          x: +s2.x.toFixed(3), y: +s2.y.toFixed(3), z: +s2.z.toFixed(3), absoluteZ:true, unresolved: true });
       });
       sim.stats_endShots = sim.shots.length;
       sim.shots.length = 0;
@@ -3629,7 +3648,7 @@
           : (f.techT - f.dur.w - f.dur.a) / f.dur.r)))
       : null; }
     function snap(f) {
-      return { x: fr(f.x), y: fr(f.y), z: fr(f.z), face: fr(f.face), st: f.state, ph: f.phase,
+      return { x: fr(f.x), y: fr(f.y), z: fr(f.z+(f.groundZ||0)), groundZ:fr(f.groundZ||0), localZ:fr(f.z), face: fr(f.face), st: f.state, ph: f.phase,
                phaseP: phasePOf(f), swingDir: f.swingDir || 1, chain: f.chainDepth || 0,
                post: f.z > 0.05 ? "air" : f.post, air: f.z > 0.05, vz: fr(f.vz),
                techKey:f.tech?f.tech.key:"", tp:f.tech&&f.dur?fr(Math.min(1,f.techT/(f.dur.w+f.dur.a+f.dur.r))):0,
@@ -3646,6 +3665,7 @@
     // a timeout compares remaining HP, regardless of either fighter's pose.
     const winner = CONTRACT ? CONTRACT.winner(A, B, sim.over) :
       (sim.over || (A.hp/A.hpMax > B.hp/B.hpMax + 0.02 ? "A" : B.hp/B.hpMax > A.hp/A.hpMax + 0.02 ? "B" : "draw"));
+    for(const e of sim.events){if(Number.isFinite(e.z)&&Number.isFinite(e.x)&&Number.isFinite(e.y)&&!e.absoluteZ)e.z=+(e.z+TERRAIN.height(scen.key,e.x,e.y,arena)).toFixed(3);delete e.absoluteZ;}
     const eventCounts = CONTRACT ? CONTRACT.eventCounts(sim.events) : sim.events.reduce((m,e)=>(m[e.type]=(m[e.type]||0)+1,m),{});
     const counts = (t) => eventCounts[t] || 0;
     // 招式库：本场若自动收纳了新招式 → 落盘（下次同名招式直接调用，不必再生成）
@@ -3656,6 +3676,7 @@
       moveLib: MOVES ? Object.assign({ used: _libState.used, added: _libState.added }, MOVES.stats()) : null,
       version: VERSION, seed, arena: Object.assign({}, arena, { z: ceilZ }), duration: +sim.t.toFixed(2), winner,
       // 情景：不只是描述——这些字段决定/记录了内核真的算了什么
+      terrain:{key:scen.key,version:1},
       scenario: { key: scen.key, zh: scen.zh, aerial: scen.aerial, water: scen.water, slick: scen.slick,
                   chase: !!sim.chase, ring: sim.ring, startZ: scen.aerial ? +Math.max(2.2, Math.min(ceilZ, ceilZ * 0.8)).toFixed(2) : 0 },
       props: sim.props.map(pr => ({ id: pr.id, zh: pr.zh, x: pr.x, y: pr.y, r: pr.r, h: pr.h || 1.2, tough: pr.tough, broken: pr.broken,

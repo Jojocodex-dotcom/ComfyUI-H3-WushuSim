@@ -167,7 +167,9 @@
     }).map(compile);
     if(!skills.length) throw Error(name+'：没有可执行的近战招式，请添加普通攻击或攻击招式。');
     skills.forEach(s=>{const old=s.reach;s.reach=Math.max(0.5,Math.min(1.3,s.reach));if(old!==s.reach) warnings.push(name+'：「'+s.zh+'」射程按近战兵器范围限幅');});
-    for(const g of ['move','defense']) if((kit[g]||[]).length) warnings.push(name+'：'+({move:'自定义身法',defense:'自定义防御'}[g])+'尚未执行；轻功/踏墙/飞行由武力等级自动解锁，卡片里的自定义身法招式不参与结算，保留原卡供查阅');
+    const customMoves=(kit.move||[]).filter(x=>/闪|侧步|滑步|翻滚|滚|撤步/.test((x.name||'')+(x.effect||''))).map(x=>({zh:x.name,kind:/滚/.test(x.name||'')?'roll':'dodge',range:finite(x.range,2,.5,8)*.5,cd:finite(x.cd,1,0.2,120),effect:x.effect||''}));
+    const customDefenses=(kit.defense||[]).filter(x=>/挡|架|卸|格|防御/.test((x.name||'')+(x.effect||''))).map(x=>({zh:x.name,cd:finite(x.cd,1,.2,120),effect:x.effect||''}));
+    for(const g of ['move','defense']) if((kit[g]||[]).length>(g==='move'?customMoves.length:customDefenses.length)) warnings.push(name+'：'+({move:'自定义身法',defense:'自定义防御'}[g])+'存在无法映射的招式；支持侧闪、滑步、翻滚与格挡架卸，飞行由等级或专飞开关控制，未知能力只保留设定、不冒充已执行');
     // 「法术」组：编译成远程施法（不必贴脸）。射程按「格→米」换算，并在 compile() 里随双方较高等级放大。
     const tier=finite(kit.tier,1,1,9);
     // 专飞角色（2026-10-01）：卡片勾「专飞（御空打斗）」＝机动按御空飞行档（≥7 级）结算，证据与提示词同步写明
@@ -198,7 +200,15 @@
       reachCells:finite(s.range,4,0.5,100),
       damage:finite(s.dmg,4,0,10000)*5,
       cd:finite(s.cd==null?s.interval:s.cd,1.4,0.2,120),
-      effect:s.effect||'', auto:!!s.auto
+      effect:s.effect||'', auto:!!s.auto,
+      ultimate:!!s.ultimate || /大招|专属大招/.test(s.effect||''),
+      ultimateProfile:s.ultimateProfile || (/大招|专属大招/.test(s.effect||'') ? (()=>{
+        const text=String(s.effect||''), charge=text.match(/蓄力秒数：[ ]*([\d.]+)~([\d.]+)/), scale=text.match(/形制米数：[ ]*([\d.]+)/);
+        const section=k=>{const m=text.match(new RegExp('；'+k+'：([\\s\\S]*?)(?=；(?:蓄力|成形|飞行|命中|消散|镜头|音效|注意)：|$)'));return m?m[1]:'';};
+        return {charge:charge?[+charge[1],+charge[2]]:[1.76,3.14],scaleM:scale?+scale[1]:null,
+          beats:{gather:section('蓄力'),shape:section('成形'),flight:section('飞行'),impact:section('命中'),fade:section('消散')},
+          camera:section('镜头'),sound:section('音效'),note:section('注意'),description:text};
+      })():null)
     }));
     // 衔接招式并进施法池，但标 linkOnly：内核只在「机会窗口」（连招段数≥1 或连中 linkAfterHits 下）放它，
     //   普通施法池里排除——否则「重剑挥砍 → 黯然销魂掌」会变成"整片都在拍掌"，主次写反。
@@ -214,7 +224,7 @@
     if(pat&&warnings) warnings.push(name+'：套用角色套路档案「'+pat.zh+'」——主战 '+primary.join('、')
       +(linkNames.length?('；衔接 '+linkNames.join('、')):'')+(traits.length?('；神通 '+traits.map(t=>t.zh).join('、')):''));
     if(fly&&warnings) warnings.push(name+'：已勾「专飞（御空打斗）」——机动按御空飞行档（'+mobTier+' 级）结算：真悬停、空中招数、滞空预算按飞行档给，全程可在空中缠斗');
-    return {name,tier,fly,style:kit.style||'calm',weapon,hp:finite(hp,5,0.1,10000)*20,skills,spells,
+    return {customMoves,customDefenses,defenseConfig:{blockPerSec:kit.blockPerSec,dodgePerSec:kit.dodgePerSec,blocksForCounter:kit.blocksForCounter,dodgesForCounter:kit.dodgesForCounter},name,tier,fly,style:kit.style||'calm',weapon,hp:finite(hp,5,0.1,10000)*20,skills,spells,
       // 主战/衔接/神通：内核照着结算，提示词照着写
       primary,link:linkNames,traits,pattern:pat?pat.key:null,patternZh:pat?pat.zh:null,
       sp: kit.sp || styleParams(kit.fightStyle, tier),
@@ -236,7 +246,7 @@
     const parsed=rules(cfg.rules),warnings=parsed.report.filter(r=>r.status==='unmapped').map(r=>'未识别规则：'+r.text);
     if(cfg.forced&&cfg.forced!=='auto') warnings.push('3D模式按真实结算判定胜负，不执行指定赢家。');
     const scen=E.scenario(cfg.scenario);
-    if(cfg.scenario&&!E.SCEN[cfg.scenario]) warnings.push('未识别的打斗情景「'+cfg.scenario+'」：内核按通用场地（无掩体/无边界/无湿滑）结算。');
+    if(cfg.scenario&&scen.key!==cfg.scenario) warnings.push('未识别的打斗情景「'+cfg.scenario+'」：内核按通用场地（无掩体/无边界/无湿滑）结算。');
     // A/B 先建（只依赖角色卡），场地尺寸依赖双方等级
     // 打斗风格（近战对拼/法术为主/近战衔接法术/空战/游走/仙神斗法）：'auto' 时按双方较高等级自动选
     const _tier0=Math.max(1,Math.min(9,Math.max(+((cfg.kitA||{}).tier)||1, +((cfg.kitB||{}).tier)||1)));
@@ -264,7 +274,7 @@
     // 高度：按规划，但必须装得下本场最高机动档（否则高等级会撞到看不见的天花板）
     const topTier=Lmax;
     const needZ=(topTier>=7?E.mobility(topTier).hover+1.5:(topTier>=3?3.0:1.6));
-    const arenaZ=Math.min(60,Math.max(planZ,needZ,cfg.scenario==='aerial'?7:0));
+    const arenaZ=Math.min(60,Math.max(planZ,needZ,scen.aerial?7:0));
     // 法术/内力技射程定稿：格 → 米，随等级放大但有**上限**——不超过场地对角线的 62%，
     // 免得高等级站在场地一头隔空轰、武打变成纯对轰（用户反馈过这个）。
     const diag=Math.hypot(w,h);
@@ -300,7 +310,7 @@
       // 情景：内核真的算了什么（掩体/边界/追逃/湿滑），提示词要按这个写
       scenario:result.scenario?{key:result.scenario.key,zh:result.scenario.zh,aerial:result.scenario.aerial,water:result.scenario.water,
         slick:result.scenario.slick,startZ:result.scenario.startZ,ring:result.scenario.ring?{r:+result.scenario.ring.r.toFixed(2)}:null}:null,
-      props:result.props||[], chase:result.chase||null,
+      props:result.props||[], terrain:result.terrain||null, chase:result.chase||null,
       // 特效分级：等级 × 风格档 → 配色／形状／体量／光照后果／环境破坏／镜头反馈（提示词按这个写）
       fx:(result.fx||fxProfile(Math.max((result.A&&result.A.tier)||(cfg.kitA&&cfg.kitA.tier)||1,
                                         (result.B&&result.B.tier)||(cfg.kitB&&cfg.kitB.tier)||1), cfg.fxStyle)),
@@ -324,7 +334,7 @@
       characters:{A:result.A,B:result.B},
       scene:cfg.scene,appearance:{A:cfg.descA,B:cfg.descB},events,
       trajectory:frames.filter((f,i)=>i%60===0||i===frames.length-1),warnings:(result.warnings||[]).filter(w=>!w.startsWith('未识别规则：')),unmappedRuleCount:(result.ruleReport||[]).filter(r=>r.status==='unmapped').length,
-      note:'Coordinates are metres: x/y ground, z height. z>0 means airborne; the mobility ladder is tier-gated (tier 1-2 ground, 3-4 leap, 5-6 wall-kick, 7-9 true flight with hover and landing shockwave). The scenario is simulated, not decorative: field/chase have solid breakable cover, arena has a ring boundary (going out = ring-out), aerial starts everyone airborne, water makes the ground slick (slip/splash). Contact height is a band, not an anatomical wound. Dodge events record attempts, not guaranteed success.'};
+      note:'Coordinates are metres: x/y ground, z height. z is world altitude; localZ above groundZ means airborne; terrain elevations do not imply flight; the mobility ladder is tier-gated (tier 1-2 ground, 3-4 leap, 5-6 wall-kick, 7-9 true flight with hover and landing shockwave). The scenario is simulated, not decorative: field/chase have solid breakable cover, arena has a ring boundary (going out = ring-out), aerial starts everyone airborne, water makes the ground slick (slip/splash). Contact height is a band, not an anatomical wound. Dodge events record attempts, not guaranteed success.'};
     // 走位表（staging）：逐拍的空间读数（谁在画面哪一侧、隔多远、多高、朝哪）——随证据一起给模型，
     //   模型照抄就能守住定位；不给的话它会自己编位置，于是出现"人乱飘／换人／少一个人"。
     const _st = stagingRows(result, cfg);
@@ -515,9 +525,13 @@
     {
       const _src = (cfg && (cfg.skillNoteZh || cfg.skillNoteEn)) ? cfg : ((cfg && cfg.source) || cfg || {});
       const _zh = _src.skillNoteZh, _en = _src.skillNoteEn;
-      if (_zh) p.skillNoteZh = String(_zh) + '\n**分镜要求**：本场大招必须**占满一整拍**——蓄力（写出秒数、有先兆）→ 释放（满屏光彩）→ 命中（KO 级破坏或极重受力）→ 收势（留痕跨镜）；招式名照抄，不许换成"一记重拳"。';
+      if (_zh) p.skillNoteZh = String(_zh) + '\n以上是技能设定；只有事件记录里实际起手或释放的大招才可写入本场。命中、破坏和终结均以记录为准。';
       if (_en) p.skillNoteEn = String(_en) + '\nThe ULTIMATE must own a full beat in the shot list (wind-up with seconds -> screen-filling release -> impact -> settle), using the given names verbatim.';
     }
+    const usedUltimates=(result.events||[]).filter(e=>e.type==='spell_cast'&&e.ultimate);
+    if(usedUltimates.length) p.skillNoteZh=(p.skillNoteZh||'')+'\n【本场已执行的大招】\n'+usedUltimates.map(e=>
+      e.tech+'：实际蓄力 '+e.chargeT+' 秒；'+(e.ultimateProfile?.description||JSON.stringify(e.ultimateProfile||{}))).join('\n')+
+      '\n大招保留完整三段运镜、全身招式同框、0.35× 慢放约 0.2 秒后回速；只按事件记录写命中、击退、沿途破坏与终结，没有记录的 KO、断兵、坑或胜者不得补写。';
     // ── 打戏铁律（2026-09-30）：吸收公开的武打/玄幻打斗 SKILL 里**可机械判定**的那几条 ──────────
     //   来源参考（开源）：xuanhuan-combat-director 的「核心铁律与实战防穿帮协议」——
     //   它的痛点描述与本程序实测到的问题完全一致（模型把"双手横架"画成 3 秒静止推刀、把抽象比喻画成朝天放烟花、
@@ -808,7 +822,7 @@
   //   这里做**默认精简**：写提示词不需要的那些一概不进素材，只留计数；说明段只留当前语言。
   //   只逐条保留"故事骨架"：出招/命中/法术起手·脱手·命中/护体/建筑碎裂/神通/天地异象/蓄力改招/KO；
   //   其余（气劲、灵光、余波、地面留痕、掩体裂纹、落地、起跳、闪避、冲刺、分身落空、震荡、残影…）一律并进计数。
-  const SLIM_KEEP = { attack:1, hit:1, block:1, clash:1, guardbreak:1, spell_cast:1, spell_release:1, spell_hit:1,
+  const SLIM_KEEP = { defense_start:1, attack:1, hit:1, block:1, clash:1, guardbreak:1, spell_cast:1, spell_release:1, spell_hit:1,
     cast_recovery:1,cast_recovery_end:1,spell_guard:1, spell_absorbed:1, ward_broken:1, prop_broken:1, trait:1, phenomenon:1, cast_cancel:1,
     ko:1, ring_out:1, cornered:1, slam:1 };
   // 装饰类 + 破坏类明细：都只留计数（碎块/震荡/裂纹一次次列出来，模型读起来全是重复数字）
@@ -841,7 +855,7 @@
       // 招式/法术类：只留「谁、什么招、什么时候、结果如何」（坐标只在建筑碎裂与 KO 上保留）
       if (t === 'attack' || t === 'hit' || t === 'spell_cast' || t === 'spell_release' || t === 'spell_hit') {
         const keep2 = ['t', 'who', 'tech', 'damage', 'dmg', 'hp', 'stun', 'kb', 'power', 'heavy', 'finisher',
-          'formKey','recoverT','readyAt','targeting','vfx','chain', 'range', 'dist', 'spd', 'chargeT', 'radius', 'link', 'height', 'ko'];
+          'ultimate','ultimateProfile','prep','effect','fire','shape','chargeRange','defenseTech','defenseEffect','formKey','recoverT','readyAt','targeting','vfx','chain', 'range', 'dist', 'spd', 'chargeT', 'radius', 'link', 'height', 'ko'];
         const o1 = { t: rnd(e.t), type: t };
         // 零值/假值字段直接省略（false 与 0 本来就是"没有"的意思：没硬直、没击退、在地面、没衔接…），
         //   只保留 damage/hp 的 0（那是有意义的读数：这一下没掉血）。
@@ -849,7 +863,7 @@
           const v = e[k];
           if (v === undefined || v === null || v === false) return;
           if (v === 0 && k !== 'damage' && k !== 'hp') return;
-          o1[k] = rnd(v);
+          o1[k] = slimNum(v);
         });
         if (e.dur) o1.dur = +((e.dur.w || 0) + (e.dur.a || 0) + (e.dur.r || 0)).toFixed(2);
         kept.push(o1);
